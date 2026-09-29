@@ -11,6 +11,51 @@ patchedDependencies:
 
 importers:
 
+  packages/browser-contract:
+    dependencies:
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+
+  packages/browser-core:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-client:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-drivers:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-providers:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+      '@openrind/browser-drivers':
+        specifier: workspace:*
+        version: link:../browser-drivers
+
+  packages/browser-service:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+      '@openrind/browser-core':
+        specifier: workspace:*
+        version: link:../browser-core
+      '@openrind/browser-providers':
+        specifier: workspace:*
+        version: link:../browser-providers
+
   .:
     devDependencies:
       cross-env:

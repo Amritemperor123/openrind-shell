@@ -126,7 +126,7 @@ function markerCommand(name, script) {
   ]);
 }
 
-async function runMarkerScript(name, script, timeoutMs) {
+async function runMarkerScript(name, script, timeoutMs, stdin) {
   const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1_000));
   const result = await wslRun(
     [
@@ -137,7 +137,7 @@ async function runMarkerScript(name, script, timeoutMs) {
       "-lc",
       `timeout ${timeoutSeconds} ${markerCommand(name, script)}`,
     ],
-    { env: buildFuseWslEnv(), timeout: timeoutMs + 5_000 },
+    { env: buildFuseWslEnv(), timeout: timeoutMs + 5_000, stdin },
   );
   return result;
 }
@@ -150,7 +150,7 @@ function markerError(action, result) {
 }
 
 /** Write the one-shot marker immediately before a new desktop connect. */
-export async function writeCurrentSessionMarker(name, value) {
+export async function writeCurrentSessionMarker(name, value, browserGrant) {
   const marker = String(value ?? "").trim();
   if (
     marker &&
@@ -159,6 +159,10 @@ export async function writeCurrentSessionMarker(name, value) {
     ).test(marker)
   ) {
     throw new Error("Invalid desktop Claude session marker.");
+  }
+  if (browserGrant !== undefined && (!marker.startsWith('openrind-shell-claude:') ||
+      typeof browserGrant !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(browserGrant))) {
+    throw new Error('Invalid browser launch grant.');
   }
   // Repair the interactive hook in the same exec that writes the marker. This
   // keeps already-created sandboxes compatible when their setup predates the
@@ -176,9 +180,11 @@ export async function writeCurrentSessionMarker(name, value) {
     `fi`,
   ].join("\n");
   const script = marker
-    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; printf %s ${shellQuote(marker)} > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
+    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
     : `rm -f ${SESSION_MARKER_PATH}`;
-  const result = await runMarkerScript(name, script, 30_000);
+  // Credentials travel through stdin rather than appearing in process arguments.
+  const payload = browserGrant === undefined ? marker : `${marker}:${browserGrant}`;
+  const result = await runMarkerScript(name, script, 30_000, payload);
   if (result.exitCode !== 0) throw markerError("launch-marker write", result);
 }
 

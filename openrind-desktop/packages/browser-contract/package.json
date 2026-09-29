@@ -1,0 +1,9 @@
+{
+  "name": "@openrind/browser-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./src/index.d.ts", "default": "./src/index.mjs" } },
+  "dependencies": { "zod": "4.3.6" },
+  "engines": { "node": ">=22.19.0" }
+}

@@ -43,6 +43,7 @@ import * as openshellCli from "./openshell/cli.mjs";
 import * as openrindShell from "./openshell/openrind-shell.mjs";
 import * as openrindCredentials from "./openshell/openrind-shell-credentials.mjs";
 import * as openrindPty from "./openshell/openrind-shell-pty.mjs";
+import { createDesktopBrowserController } from './openshell/browser-desktop.mjs';
 import {
   deriveOpenrindShellSandboxName,
   launchExternalTerminalToSandbox,
@@ -679,13 +680,14 @@ async function writeOpenrindShellSessionMarker(
   profile,
   agentSessionId,
   haloopSessionAssertion,
+  browserGrant,
 ) {
   const value = openrindShell.resolveAgentSessionValue(
     profile,
     agentSessionId,
     haloopSessionAssertion,
   );
-  await openrindShell.writeCurrentSessionMarker(sandboxName, value);
+  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant);
 }
 
 // Agent sessions are CONCURRENT: a sandbox hosts one live PTY per Openrind Desktop
@@ -697,6 +699,18 @@ async function writeOpenrindShellSessionMarker(
 // next marker. openrindMarkerPending remembers that a spawned connect has
 // not been confirmed to consume its marker yet.
 const openrindFreshOpenChains = new Map();
+let desktopBrowserController;
+function browserController() {
+  return desktopBrowserController ??= createDesktopBrowserController({
+    resourcesPath: app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../packaging/browser-client'),
+    userDataPath: app.getPath('userData'),
+    onDisconnect: () => {
+      // Browser grants are fenced by the worker. Existing terminals retain their
+      // inference/FUSE lifecycle; browser requests fail until explicit recovery.
+      console.warn('Browser service disconnected; browser session recovery is required.');
+    },
+  });
+}
 const openrindMarkerPending = new Set();
 const openrindHaloopCredentialMaintenanceSandboxes = new Set();
 const openrindHaloopOperations = new Set();
@@ -737,7 +751,8 @@ function trackHaloopOperation(operation) {
  * @param {{ sandboxName: string, cols?: number, rows?: number,
  *           extraEnv?: Record<string, string>, agentSessionId: string | null,
  *           profile: string, haloopCapture?: object,
- *           haloopContextId?: string, haloopSessionAssertion?: string }} opts
+ *           haloopContextId?: string, haloopSessionAssertion?: string,
+ *           prepareBrowserLease?: () => Promise<{token: string, activate: () => void, stop: () => Promise<void>}> }} opts
  */
 function openOpenrindShellPtySession(opts) {
   const {
@@ -750,11 +765,15 @@ function openOpenrindShellPtySession(opts) {
     haloopCapture,
     haloopContextId,
     haloopSessionAssertion,
+    prepareBrowserLease,
   } = opts;
   if (!["openrind-shell-claude", "openrind-shell-openclaw", "openrind-shell-openhands", "openrind-shell-openhands-script"].includes(profile)) {
     throw new Error("The primary FUSE runtime supports Claude, OpenClaw, and OpenHands profiles only.");
   }
   const expectedAgent = profile === "openrind-shell-claude" ? "claude" : profile === "openrind-shell-openclaw" ? "openclaw" : "openhands";
+  if (prepareBrowserLease && profile !== 'openrind-shell-claude') {
+    throw new Error('Browser launch integration currently requires Claude.');
+  }
   const agent = String(extraEnv?.OPENRIND_SHELL_AGENT ?? "").trim();
   if (agent !== expectedAgent) {
     throw new Error("A validated OPENRIND_SHELL_AGENT value is required for agent launch.");
@@ -792,16 +811,37 @@ function openOpenrindShellPtySession(opts) {
         await openrindShell.waitCurrentSessionMarkerConsumed(sandboxName);
         openrindMarkerPending.delete(sandboxName);
       }
+      // Issue only inside the serialized fresh-launch section. Reattaching an
+      // existing PTY must not issue, replace or revoke its browser grant.
+      const queuedLive = openrindPty.findSessionBySandboxAndAgent(sandboxName, agentSessionId);
+      if (queuedLive && !queuedLive.exitInfo) {
+        return openrindPty.openSession({ sandboxName, cols, rows, extraEnv, agentSessionId, haloopContextId });
+      }
+      let browserLease;
+      if (prepareBrowserLease) {
+        browserLease = await prepareBrowserLease();
+      } else if (profile === 'openrind-shell-claude') {
+        try {
+          browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId });
+        } catch (error) {
+          console.warn('Browser runtime setup failed; proceeding without browser lease:', error);
+          browserLease = undefined;
+        }
+      }
+      let ptyExited = false;
+      let opened;
+      try {
       await writeOpenrindShellSessionMarker(
         sandboxName,
         profile,
         agentSessionId,
         haloopSessionAssertion,
+        browserLease?.token,
       );
       // Even a desktop launch without a session id writes the `auto` marker, so
       // every fresh connect must wait for this marker to be consumed.
       openrindMarkerPending.add(sandboxName);
-      return openrindPty.openSession({
+      opened = await openrindPty.openSession({
         sandboxName,
         cols,
         rows,
@@ -809,11 +849,20 @@ function openOpenrindShellPtySession(opts) {
         agentSessionId,
         haloopContextId,
         onLifecycleExit: async (event) => {
-          await openrindShell.recordHaloopApplicationSpans(haloopCapture, [
+          ptyExited = true;
+          try { await browserLease?.stop(); }
+          finally { await openrindShell.recordHaloopApplicationSpans(haloopCapture, [
             openrindShell.buildHaloopAgentLifecycleEvent(agent, event),
-          ]);
+          ]); }
         },
       });
+      if (!ptyExited) browserLease?.activate();
+      return opened;
+      } catch (error) {
+        if (opened && !opened.reused && !ptyExited) openrindPty.closeSession(opened.id, 'SIGTERM', 'browser-launch-failed');
+        await browserLease?.stop().catch(() => {});
+        throw error;
+      }
     });
   openrindFreshOpenChains.set(sandboxName, next);
   void next
@@ -1174,6 +1223,7 @@ let runtimeBootstrapPromise = null;
 async function disposeRuntimeBeforeQuit() {
   if (runtimeDisposedForQuit) return;
   runtimeDisposedForQuit = true;
+  await desktopBrowserController?.close().catch(() => undefined);
   await openrindShell.stopHaloopRuntime().catch(() => undefined);
   await runtimeManager.dispose().catch(() => undefined);
 }
@@ -2780,6 +2830,9 @@ async function handleDesktopInvoke(event, command, ...args) {
               openrindMarkerPending.delete(name);
               return openrindPty.closeSessionsForSandbox(name, "sandbox-delete");
             },
+          });
+          await desktopBrowserController?.removeSandbox(name).catch(error => {
+            console.warn('Browser controller cleanup failed for sandbox delete:', error);
           });
           await openrindShell.deleteOpenrindShellSandbox(name);
           return result;

@@ -31,6 +31,19 @@ profile="${marker%%:*}"
 marker_remainder="${marker#*:}"
 session_id="${marker_remainder%%:*}"
 session_context="${marker_remainder#*:}"
+unset OPENRIND_BROWSER_GRANT
+case "$session_context" in
+  *:*)
+    browser_grant="${session_context#*:}"
+    session_context="${session_context%%:*}"
+    if [ "$profile" != openrind-shell-claude ] || ! printf '%s' "$browser_grant" | grep -Eq '^[A-Za-z0-9_-]{43}$'; then
+      echo "Openrind Shell: browser launch grant is invalid. Reconnect the session."
+      exit 64
+    fi
+    export OPENRIND_BROWSER_GRANT="$browser_grant"
+    unset browser_grant
+    ;;
+esac
 
 if [ "$profile" = "$marker" ] || [ "$session_id" = "$marker_remainder" ]; then
   echo "Openrind Shell: signed Haloop launch context was not found. Reconnect the session."
@@ -41,7 +54,7 @@ if ! printf '%s' "$session_context" | grep -Eq '^v1\.[0-9a-f]{32}\.[1-9][0-9]{9,
   exit 64
 fi
 export OPENRIND_HALOOP_SESSION_CONTEXT="$session_context"
-unset session_context marker_remainder
+unset session_context marker_remainder marker
 
 case "$session_id" in
   auto)

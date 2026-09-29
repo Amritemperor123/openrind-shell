@@ -91,6 +91,15 @@ linux:
 win:
   icon: resources/icons/icon.ico
   extraResources:
+    # Fixed browser worker/edge plus a separately verified Node runtime.
+    # Stage with packaging/browser-client/stage-runtime.mjs before packaging.
+    - from: ../../packaging/browser-client/browser-runtime
+      to: browser-runtime
+      filter:
+        - node.exe
+        - worker.cjs
+        - edge.cjs
+        - runtime-manifest.json
     - from: resources/sidecars
       to: sidecars
       filter:

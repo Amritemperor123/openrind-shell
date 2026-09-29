@@ -1,0 +1,4 @@
+{
+  "name": "@openrind/browser-providers", "version": "0.0.0", "private": true, "type": "module",
+  "exports": { ".": "./src/index.mjs" }, "dependencies": { "@openrind/browser-contract": "workspace:*", "@openrind/browser-drivers": "workspace:*" }
+}

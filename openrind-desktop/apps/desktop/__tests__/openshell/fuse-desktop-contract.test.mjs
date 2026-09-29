@@ -16,9 +16,9 @@ test("desktop image and runtime share the current PTY bridge contract", async ()
     source("Dockerfile.openrind-shell"),
     source("openrind-desktop/apps/desktop/electron/openshell/fuse-sandbox.mjs"),
   ]);
-  assert.match(dockerfile, /fuse-haloop-required-v28-openhands/);
+  assert.match(dockerfile, /fuse-haloop-required-v29-browser-client/);
   assert.match(dockerfile, /openrind-pty-bridge\.py/);
-  assert.match(sandbox, /IMAGE_CONTRACT = "fuse-haloop-required-v28-openhands"/);
+  assert.match(sandbox, /IMAGE_CONTRACT = "fuse-haloop-required-v29-browser-client"/);
 });
 
 test("developer image builder targets the dedicated WSL daemon and validates all runtime contracts", async () => {
@@ -35,7 +35,7 @@ test("developer image builder targets the dedicated WSL daemon and validates all
   assert.match(builder, /w8-haloop-openrind-v6-durable-analysis/);
   assert.match(builder, /--production-haloop/);
   assert.match(builder, /"docker",\s*"image",\s*"push"/);
-  assert.match(builder, /fuse-haloop-required-v28-openhands/);
+  assert.match(builder, /fuse-haloop-required-v29-browser-client/);
   assert.match(builder, /openrind-haloop-v2/);
   assert.match(builder, /openrind-haloop-collector-v1/);
   assert.match(builder, /openrind-desktop-collector/);

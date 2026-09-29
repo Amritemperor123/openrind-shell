@@ -1,0 +1,30 @@
+{
+  "name": "@openrind/browser-transport-spike",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "build": "node build.mjs",
+    "test:wsl": "node live-wsl.mjs",
+    "test:wsl-http": "node live-wsl-http.mjs",
+    "test:electron": "node live-electron.mjs",
+    "build:packaged-probe": "npm run build && node package-probe.mjs",
+    "validate:step1": "node final-step1.mjs",
+    "stage:chromium": "node stage-chromium.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "cborg": "6.1.2",
+    "undici": "7.29.1",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@electron/asar": "4.3.0",
+    "electron": "44.4.5",
+    "esbuild": "0.27.2",
+    "playwright": "1.63.0"
+  }
+}

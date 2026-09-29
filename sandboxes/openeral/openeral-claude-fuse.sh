@@ -71,6 +71,17 @@ esac
 # Bundled skills are staged during setup, before Desktop reports the sandbox as
 # ready. Do not scan or copy them between the PTY bridge and Claude's first byte.
 
+# A provisioned Desktop browser launch must pass preflight, including partial
+# provisioning failures. Use Claude's additive MCP input; preserve user servers
+# and keep this shell as the parent responsible for the final FUSE flush.
+if [ "${OPENRIND_DESKTOP_CLAUDE_LAUNCH:-0}" = 1 ]; then
+  if [ -e /etc/openrind-browser/descriptor.json ] || [ -L /etc/openrind-browser/descriptor.json ] || \
+      [ -n "${OPENRIND_BROWSER_GRANT:-}" ] || [ -n "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ]; then
+    /usr/bin/node /opt/openrind-browser/preflight.cjs
+    set -- --mcp-config /opt/openrind-browser/mcp.json "$@"
+  fi
+fi
+
 # Keep the terminal on Claude's stdin. A non-interactive shell gives an
 # asynchronous command /dev/null as stdin (POSIX; dash ignores a plain <&0),
 # so save the wrapper's stdin on fd 3 first and hand that to the child.

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const DISTRO_NAME = "openrind-desktop-openshell";
 const FUSE_IMAGE = "openrind-shell-fuse:local";
-const FUSE_CONTRACT = "fuse-haloop-required-v28-openhands";
+const FUSE_CONTRACT = "fuse-haloop-required-v29-browser-client";
 const OPENSHELL_BASE_IMAGE = "ghcr.io/nvidia/openshell-community/sandboxes/base:latest";
 const CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code";
 const HALOOP_LOCAL_IMAGE = "haloop-gateway:local";

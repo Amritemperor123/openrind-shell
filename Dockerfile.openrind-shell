@@ -2,22 +2,42 @@
 # Keep synchronized with sandboxes/openeral/Dockerfile. Dockerfile.openeral is
 # retained as a legacy entry point.
 
+FROM node:22.19.0-bookworm-slim AS browser-client-builder
+WORKDIR /source/openrind-desktop/packaging/browser-client
+COPY openrind-desktop/packaging/browser-client/package.json openrind-desktop/packaging/browser-client/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY openrind-desktop/packaging/browser-client/entry.mjs openrind-desktop/packaging/browser-client/build.mjs ./
+COPY openrind-desktop/packaging/browser-client/preflight-entry.mjs openrind-desktop/packaging/browser-client/mcp.json ./
+COPY openrind-desktop/packaging/browser-client/provision-entry.mjs ./
+COPY openrind-desktop/packaging/browser-client/edge-entry.mjs ./
+COPY openrind-desktop/packaging/browser-client/worker-entry.mjs ./
+COPY openrind-desktop/packaging/browser-client/bridge/ ./bridge/
+COPY openrind-desktop/packages/browser-client/src/ /source/openrind-desktop/packages/browser-client/src/
+COPY openrind-desktop/packages/browser-contract/src/ /source/openrind-desktop/packages/browser-contract/src/
+COPY openrind-desktop/packages/browser-core/src/ /source/openrind-desktop/packages/browser-core/src/
+COPY openrind-desktop/packages/browser-providers/src/ /source/openrind-desktop/packages/browser-providers/src/
+COPY openrind-desktop/packages/browser-service/src/ /source/openrind-desktop/packages/browser-service/src/
+RUN npm run build
+
 FROM rust:1.95-bookworm AS fused-builder
 
 WORKDIR /source
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY sandboxes/openeral/openclaw-agent-launcher.c sandboxes/openeral/openhands-agent-launcher.c ./
+COPY openrind-desktop/packages/browser-client/native/launcher.c browser-client-launcher.c
 RUN cargo build --locked --release -p openeral-fused \
     && cc -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror \
         -o openrind-openclaw-agent openclaw-agent-launcher.c \
     && cc -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror \
         -o openrind-openhands-agent openhands-agent-launcher.c \
-    && strip target/release/openeral-fused openrind-openclaw-agent openrind-openhands-agent
+    && cc -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror \
+        -o openrind-browser-client browser-client-launcher.c \
+    && strip target/release/openeral-fused openrind-openclaw-agent openrind-openhands-agent openrind-browser-client
 
 FROM ghcr.io/nvidia/openshell-community/sandboxes/base:latest
 
-LABEL com.openrind.desktop.fuse-contract="fuse-haloop-required-v28-openhands"
+LABEL com.openrind.desktop.fuse-contract="fuse-haloop-required-v29-browser-client"
 
 USER root
 
@@ -55,6 +75,14 @@ COPY --from=fused-builder /source/target/release/openeral-fused /usr/local/bin/o
 # OpenShell authorizes this kernel-visible parent, never the shared Node runtime.
 COPY --from=fused-builder /source/openrind-openclaw-agent /usr/local/bin/openrind-openclaw-agent
 COPY --from=fused-builder /source/openrind-openhands-agent /usr/local/bin/openrind-openhands-agent
+COPY --from=fused-builder /source/openrind-browser-client /usr/local/bin/openrind-browser-client
+COPY --from=browser-client-builder /source/openrind-desktop/packaging/browser-client/dist/ /opt/openrind-browser/
+# The endpoint descriptor is installed by trusted provisioning, not baked with
+# a default endpoint or credentials. Unprovisioned client startup fails closed.
+RUN mkdir -p /etc/openrind-browser \
+    && chown -R root:root /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client \
+    && chmod 0755 /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client \
+    && chmod 0644 /opt/openrind-browser/*.cjs /opt/openrind-browser/*.json
 COPY sandboxes/openeral/openhands-agent.py /opt/openrind-openhands/openhands-agent.py
 COPY sandboxes/openeral/openrind-openhands-fuse.sh /usr/local/bin/openrind-openhands
 COPY sandboxes/openeral/openeral-claude-fuse.sh /usr/local/bin/claude
@@ -86,7 +114,7 @@ RUN chmod 755 /usr/local/bin/openrind-shell-fused /usr/local/bin/claude /usr/loc
     && bash -n /opt/openrind-shell/setup.sh \
     && node --check /opt/openrind-shell/configure-haloop.mjs \
     && node --check /opt/openrind-shell/configure-openclaw-fuse.mjs \
-    && printf '%s' fuse-haloop-required-v28-openhands > /opt/openrind-shell/desktop-contract \
+    && printf '%s' fuse-haloop-required-v29-browser-client > /opt/openrind-shell/desktop-contract \
     && ln -sf /usr/local/bin/openrind-shell-fused /usr/local/bin/openeral-fused \
     && ln -sf /opt/openrind-shell/setup.sh /usr/local/bin/openrind-shell \
     && ln -sf /opt/openrind-shell/setup.sh /usr/local/bin/openrind-shell-init \

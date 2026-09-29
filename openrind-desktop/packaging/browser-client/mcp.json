@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "openrind-browser": {
+      "type": "stdio",
+      "command": "/usr/local/bin/openrind-browser-client",
+      "args": []
+    }
+  }
+}

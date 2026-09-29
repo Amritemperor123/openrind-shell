@@ -20,7 +20,7 @@ import {
 } from "./fuse-runtime.mjs";
 import { DISTRO_NAME, ensureWslKeepalive, wslRun, wslSpawn } from "./wsl.mjs";
 
-const IMAGE_CONTRACT = "fuse-haloop-required-v28-openhands";
+const IMAGE_CONTRACT = "fuse-haloop-required-v29-browser-client";
 const SESSION_MARKER = "/var/lib/openrind-shell/runtime/desktop-session";
 const CLAUDE_HOME_MOUNT = "/sandbox/claude-home";
 const CLAUDE_HOME_VOLUME_PREFIX = "openrind-claude-home-";
