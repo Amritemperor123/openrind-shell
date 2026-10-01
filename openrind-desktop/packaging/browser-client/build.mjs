@@ -13,6 +13,7 @@ for (const [entry, name] of entries) {
 const built = await build({
   absWorkingDir: here, entryPoints: [entry], outfile: `dist/${name}.cjs`,
   bundle: true, platform: 'node', target: 'node22.19', format: 'cjs', write: false,
+  external: ['playwright', 'playwright-core'],
   // Resolve the shared source against this isolated, locked build dependency set.
   alias: {
     '@openrind/browser-contract': fileURLToPath(new URL('../../packages/browser-contract/src/index.mjs', import.meta.url)),
