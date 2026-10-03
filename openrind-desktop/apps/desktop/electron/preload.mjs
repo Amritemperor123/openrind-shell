@@ -144,6 +144,7 @@ contextBridge.exposeInMainWorld("__OPENRIND_DESKTOP_ELECTRON__", {
   },
   browser: {
     start(opts) { return ipcRenderer.invoke("openrind-desktop:browser:start", opts); },
+    navigate(opts) { return ipcRenderer.invoke("openrind-desktop:browser:navigate", opts); },
     stop(opts) { return ipcRenderer.invoke("openrind-desktop:browser:stop", opts); },
     takeControl(opts) { return ipcRenderer.invoke("openrind-desktop:browser:take-control", opts); },
     resume(opts) { return ipcRenderer.invoke("openrind-desktop:browser:resume", opts); },

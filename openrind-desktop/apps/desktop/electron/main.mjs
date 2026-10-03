@@ -822,9 +822,9 @@ function openOpenrindShellPtySession(opts) {
       let browserLease;
       if (prepareBrowserLease) {
         browserLease = await prepareBrowserLease();
-      } else if (profile === 'openrind-shell-claude') {
+      } else if (profile === 'openrind-shell-claude' || profile === 'openrind-shell-openhands' || profile === 'openrind-shell-openhands-script' || profile === 'openrind-shell-openclaw') {
         try {
-          browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId });
+          browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
         } catch (error) {
           console.warn('Browser runtime setup failed; proceeding without browser lease:', error);
           browserLease = undefined;

@@ -38,6 +38,14 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     };
   });
 
+  ipcMain.handle('openrind-desktop:browser:navigate', async (event, opts = {}) => {
+    checkSender(event);
+    const { viewId, owner = 'desktop_user', url } = opts;
+    if (!viewId || !url) throw new BrowserFault('INVALID_ARGUMENT');
+    const res = await broker.navigate(viewId, owner, url);
+    return { ok: true, url: res.url, documentGeneration: res.documentGeneration };
+  });
+
   ipcMain.handle('openrind-desktop:browser:stop', async (event, opts = {}) => {
     checkSender(event);
     const { viewId, sessionId } = opts;
