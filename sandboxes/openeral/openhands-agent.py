@@ -137,7 +137,7 @@ def main():
     admin_token = os.environ.get('ADMIN_TOKEN') or os.environ.get('W8_BYOH_ADMIN_TOKEN') or ''
     base = normalize_gateway_url(os.environ.get('HALOOP_GATEWAY_URL') or os.environ.get('LLM_BASE_URL') or BASE_URL)
     openai_base = f"{base}/v1" if not base.endswith('/v1') else base
-    model = os.environ.get('OPENRIND_SHELL_OPENHANDS_MODEL') or os.environ.get('LLM_MODEL') or 'openai/inclusionai/ling-3.0-flash-sante:free'
+    model = os.environ.get('OPENRIND_SHELL_OPENHANDS_MODEL') or os.environ.get('LLM_MODEL') or 'openai/nvidia/nemotron-3.5-lightning:free'
     os.chdir(WORKSPACE)
     env_updates = {
         'HOME': '/sandbox/openhands-home',
@@ -159,6 +159,10 @@ def main():
     }
     if admin_token:
         env_updates['ADMIN_TOKEN'] = admin_token
+    if os.environ.get('OPENRIND_BROWSER_GRANT'):
+        env_updates['OPENRIND_BROWSER_GRANT'] = os.environ['OPENRIND_BROWSER_GRANT']
+    if os.environ.get('OPENRIND_BROWSER_SERVICE_TOKEN'):
+        env_updates['OPENRIND_BROWSER_SERVICE_TOKEN'] = os.environ['OPENRIND_BROWSER_SERVICE_TOKEN']
     os.environ.update(env_updates)
     # No nested Docker/cloud runtime: the local CLI executes inside OpenShell.
     args = ['openhands', '--override-with-envs']
