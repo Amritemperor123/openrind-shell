@@ -180,7 +180,7 @@ export async function writeCurrentSessionMarker(name, value, browserGrant) {
     `fi`,
   ].join("\n");
   const script = marker
-    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
+    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; printf %s ${shellQuote(name)} > /var/lib/openrind-shell/runtime/sandbox-name; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
     : `rm -f ${SESSION_MARKER_PATH}`;
   // Credentials travel through stdin rather than appearing in process arguments.
   const payload = browserGrant === undefined ? marker : `${marker}:${browserGrant}`;

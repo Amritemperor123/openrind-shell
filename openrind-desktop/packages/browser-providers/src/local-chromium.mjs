@@ -58,7 +58,7 @@ export function createLocalChromiumProvider(options = {}) {
         profileDir = await mkdtemp(join(tmpdir(), 'openrind-chromium-'));
       }
 
-      const isHeadless = process.env.OPENRIND_HEADLESS === 'false' ? false : options.headless !== false;
+      const isHeadless = process.env.OPENRIND_HEADLESS === 'true' ? true : (options.headless === true ? true : false);
       let context;
       try {
         context = await chromium.launchPersistentContext(profileDir, {

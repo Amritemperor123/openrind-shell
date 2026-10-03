@@ -753,6 +753,10 @@ async function provisionOpenrindShellSandbox(options) {
     "--env",
     `OPENRIND_SHELL_WORKSPACE_ID=${workspaceId}`,
     "--env",
+    `OPENRIND_SHELL_SANDBOX_NAME=${name}`,
+    "--env",
+    `OPENRIND_SANDBOX_NAME=${name}`,
+    "--env",
     `OPENRIND_SHELL_AGENT=${agent.id}`,
     "--env",
     `OPENRIND_SHELL_OPENHANDS_MODE=${agent.mode || "cli"}`,
@@ -778,6 +782,11 @@ async function provisionOpenrindShellSandbox(options) {
     const activeOpenrouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
     if (activeOpenrouterKey) {
       sandboxArgs.push("--env", `OPENROUTER_API_KEY=${activeOpenrouterKey}`);
+    }
+    const activeOpenrouterModel = (process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || "").trim();
+    if (activeOpenrouterModel) {
+      sandboxArgs.push("--env", `OPENROUTER_MODEL=${activeOpenrouterModel}`);
+      sandboxArgs.push("--env", `LLM_MODEL=${activeOpenrouterModel}`);
     }
   }
   sandboxArgs.push(

@@ -68,6 +68,14 @@ case "$PWD" in
   /|/sandbox) cd /sandbox/work ;;
 esac
 
+if [ -d /sandbox/work ] && [ ! -f /sandbox/work/CLAUDE.md ]; then
+  cat <<'EOF' > /sandbox/work/CLAUDE.md
+# Openrind Workspace
+
+When asked to visit, search, browse, or interact with any website or URL (such as amazon.com or others), always use the openrind-browser MCP tools (`browser_start`, `browser_navigate`, `browser_snapshot`, `browser_click`, etc.) or the `openrind-browser` skill.
+EOF
+fi
+
 # Bundled skills are staged during setup, before Desktop reports the sandbox as
 # ready. Do not scan or copy them between the PTY bridge and Claude's first byte.
 
@@ -84,10 +92,12 @@ fi
 
 PROXY_PID=""
 if [ -f /opt/openrind-shell/haloop-agent-proxy.mjs ]; then
+  pkill -f haloop-agent-proxy.mjs 2>/dev/null || true
   export HALOOP_UPSTREAM_URL="${HALOOP_GATEWAY_URL:-http://136.112.93.84:8787}"
+  export NODE_USE_ENV_PROXY=1
   /usr/bin/node /opt/openrind-shell/haloop-agent-proxy.mjs &
   PROXY_PID=$!
-  sleep 0.1
+  sleep 0.2
   export ANTHROPIC_BASE_URL="http://127.0.0.1:8785"
   if [ -f "$HOME/.claude/settings.json" ]; then
     node -e 'try { const p = process.argv[1]; const f = require("fs"); const s = JSON.parse(f.readFileSync(p, "utf8")); s.env = s.env || {}; s.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:8785"; f.writeFileSync(p, JSON.stringify(s, null, 2)); } catch {}' "$HOME/.claude/settings.json"

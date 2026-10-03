@@ -134,6 +134,29 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     setState(s => ({ ...s, isOpen: visible }));
   }, [electron]);
 
+  useEffect(() => {
+    if (!electron?.browser?.onEvent) return;
+    const unsub = electron.browser.onEvent((evt: any) => {
+      if (!evt) return;
+      if (evt.type === 'start' || evt.type === 'navigate') {
+        setState(s => ({
+          ...s,
+          isOpen: true,
+          status: 'ready',
+          viewId: evt.viewId || s.viewId,
+          currentUrl: evt.url || s.currentUrl,
+        }));
+      } else if (evt.type === 'stop') {
+        setState(s => ({
+          ...s,
+          isOpen: false,
+          status: 'idle',
+        }));
+      }
+    });
+    return unsub;
+  }, [electron]);
+
   return {
     state,
     startSession,

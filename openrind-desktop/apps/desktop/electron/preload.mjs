@@ -151,6 +151,13 @@ contextBridge.exposeInMainWorld("__OPENRIND_DESKTOP_ELECTRON__", {
     setBounds(opts) { return ipcRenderer.invoke("openrind-desktop:browser:set-bounds", opts); },
     setVisible(opts) { return ipcRenderer.invoke("openrind-desktop:browser:set-visible", opts); },
     status(opts) { return ipcRenderer.invoke("openrind-desktop:browser:status", opts); },
+    onEvent(callback) {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("openrind-desktop:browser:event", handler);
+      return () => {
+        ipcRenderer.removeListener("openrind-desktop:browser:event", handler);
+      };
+    },
   },
   meta: {
     initialDeepLinks: [],

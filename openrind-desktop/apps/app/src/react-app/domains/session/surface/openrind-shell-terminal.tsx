@@ -1748,7 +1748,7 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
         ) : null}
         </div>
 
-        {browserOpen ? (
+        {browserOpen || browser.state.isOpen ? (
           <aside style={{ width: 380, minWidth: 320 }} className="flex flex-col border-l border-dls-border bg-dls-surface z-20">
             <BrowserPanel
               state={browser.state}
@@ -1758,7 +1758,10 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
               onTakeControl={browser.takeControl}
               onResume={browser.resumeControl}
               onSetBounds={browser.setBounds}
-              onClosePanel={() => setBrowserOpen(false)}
+              onClosePanel={() => {
+                setBrowserOpen(false);
+                browser.setVisible(false);
+              }}
             />
           </aside>
         ) : null}

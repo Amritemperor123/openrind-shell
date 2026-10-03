@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import http from 'node:http';
 import https from 'node:https';
+import fs from 'node:fs';
 import { URL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
@@ -21,11 +22,43 @@ const isOpenRouterKey = Boolean(openRouterKey) || anthropicKey.startsWith('sk-or
 const defaultKey = isOpenRouterKey ? (openRouterKey || anthropicKey) : (anthropicKey || openRouterKey);
 const provider = isOpenRouterKey ? 'openrouter' : (process.env.W8_HALOOP_PROVIDER || 'anthropic');
 const adminToken = process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || 'w8-catalog-simulation-admin';
-const defaultModel = process.env.OPENRIND_SHELL_OPENHANDS_MODEL || process.env.LLM_MODEL || 'nvidia/nemotron-3.5-lightning:free';
+const defaultModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || process.env.OPENRIND_SHELL_OPENHANDS_MODEL || 'qwen/qwen3.8-27b:free';
+
+function resolveProjectName() {
+  let raw = (
+    process.env.OPENRIND_SANDBOX_NAME ||
+    process.env.OPENRIND_SHELL_SANDBOX_NAME ||
+    process.env.OPENRIND_SHELL_WORKSPACE_ID ||
+    process.env.WORKSPACE_ID ||
+    ''
+  ).trim();
+  if (!raw && fs.existsSync('/var/lib/openrind-shell/runtime/sandbox-name')) {
+    try { raw = fs.readFileSync('/var/lib/openrind-shell/runtime/sandbox-name', 'utf8').trim(); } catch {}
+  }
+  if (!raw && fs.existsSync('/var/lib/openrind-shell/runtime/workspace-id')) {
+    try { raw = fs.readFileSync('/var/lib/openrind-shell/runtime/workspace-id', 'utf8').trim(); } catch {}
+  }
+  return raw.replace(/^or-/, '') || 'default';
+}
 
 function sendUpstream(reqPath, reqMethod, reqHeaders, callback) {
   const headers = { ...reqHeaders, host: targetUrl.host };
 
+  // When NODE_USE_ENV_PROXY=1 is active (Node 22 built-in proxy agent),
+  // client.request automatically tunnels through HTTP_PROXY to targetUrl.hostname:targetUrl.port.
+  // Passing targetUrl directly ensures port 8787 is preserved and not overwritten with proxy port 3128.
+  if (process.env.NODE_USE_ENV_PROXY === '1') {
+    return client.request({
+      protocol: targetUrl.protocol,
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (isHttps ? 443 : 80),
+      path: reqPath,
+      method: reqMethod,
+      headers,
+    }, callback);
+  }
+
+  // Fallback if NODE_USE_ENV_PROXY is not active and proxyUrl is defined
   if (proxyUrl && targetUrl.protocol === 'http:') {
     const fullUrl = `${targetUrl.protocol}//${targetUrl.host}${reqPath}`;
     return http.request({
@@ -149,12 +182,15 @@ const server = http.createServer((req, res) => {
 
     // If using OpenRouter, adapt /v1/messages to OpenRouter /v1/chat/completions
     if (isMessages && body && isOpenRouterKey) {
+      const chosenModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || (
+        body.model && !body.model.startsWith('claude-') ? body.model : defaultModel
+      );
       const openAiMessages = anthropicToOpenAiMessages(body);
       const openAiTools = anthropicToOpenAiTools(body.tools);
       const payloadObj = {
-        model: defaultModel,
+        model: chosenModel,
         messages: openAiMessages,
-        max_tokens: body.max_tokens || 1024,
+        max_tokens: Math.max(Number(body.max_tokens) || 4096, 4096),
         stream: isStream,
       };
       if (openAiTools) {
@@ -162,18 +198,32 @@ const server = http.createServer((req, res) => {
       }
       const openAiPayload = JSON.stringify(payloadObj);
 
+      const projectName = resolveProjectName();
+      const collectorUrl = process.env.HALOOP_COLLECTOR_URL || 'http://136.112.93.84:8788';
+      const sessionContext = process.env.OPENRIND_HALOOP_SESSION_CONTEXT || req.headers['x-openrind-haloop-session'] || '';
       const forwardHeaders = {
         'content-type': 'application/json',
         'content-length': Buffer.byteLength(openAiPayload),
         'x-w8-haloop-provider': 'openrouter',
         'x-w8-haloop-admin-token': adminToken,
+        'x-w8-haloop-metadata': JSON.stringify({ project: projectName }),
+        'x-w8-haloop-config': JSON.stringify({
+          input_guardrails: [{ 'halo.mark': { collectorURL: collectorUrl }, async: false, deny: false }],
+          output_guardrails: [{ 'halo.export': { collectorURL: collectorUrl, defaultProject: projectName }, async: false, deny: false }],
+        }),
       };
+
+      if (sessionContext) {
+        forwardHeaders['x-openrind-haloop-session'] = sessionContext;
+      }
 
       const authKey = openRouterKey || defaultKey;
       if (authKey) {
         forwardHeaders['authorization'] = authKey.startsWith('Bearer ')
           ? authKey
           : `Bearer ${authKey}`;
+        forwardHeaders['x-api-key'] = authKey;
+        forwardHeaders['x-w8-haloop-api-key'] = authKey;
       }
 
       const upstream = sendUpstream('/v1/chat/completions', 'POST', forwardHeaders, upstreamRes => {
@@ -182,8 +232,16 @@ const server = http.createServer((req, res) => {
           upstreamRes.on('data', c => errChunks.push(c));
           upstreamRes.on('end', () => {
             const errBody = Buffer.concat(errChunks).toString('utf8');
+            let parsedErr;
+            try { parsedErr = JSON.parse(errBody); } catch {}
+            const errMsg = parsedErr?.error?.message || errBody || 'Upstream provider error';
             res.writeHead(upstreamRes.statusCode || 500, { 'content-type': 'application/json' });
-            res.end(errBody);
+            res.end(JSON.stringify({
+              error: {
+                type: 'api_error',
+                message: errMsg,
+              },
+            }));
           });
           return;
         }
@@ -456,15 +514,28 @@ const server = http.createServer((req, res) => {
     }
 
     // Default passthrough for other routes or if using native anthropic key
+    const projectName = resolveProjectName();
+    const collectorUrl = process.env.HALOOP_COLLECTOR_URL || 'http://136.112.93.84:8788';
+    const sessionContext = process.env.OPENRIND_HALOOP_SESSION_CONTEXT || req.headers['x-openrind-haloop-session'] || '';
     const headers = { ...req.headers };
     headers['x-w8-haloop-provider'] = provider;
     headers['x-w8-haloop-admin-token'] = adminToken;
+    headers['x-w8-haloop-metadata'] = JSON.stringify({ project: projectName });
+    headers['x-w8-haloop-config'] = JSON.stringify({
+      input_guardrails: [{ 'halo.mark': { collectorURL: collectorUrl }, async: false, deny: false }],
+      output_guardrails: [{ 'halo.export': { collectorURL: collectorUrl, defaultProject: projectName }, async: false, deny: false }],
+    });
+
+    if (sessionContext) {
+      headers['x-openrind-haloop-session'] = sessionContext;
+    }
 
     if (defaultKey) {
       headers['authorization'] = defaultKey.startsWith('Bearer ')
         ? defaultKey
         : `Bearer ${defaultKey}`;
       headers['x-api-key'] = defaultKey;
+      headers['x-w8-haloop-api-key'] = defaultKey;
     }
 
     const clientReq = sendUpstream(req.url, req.method, headers, clientRes => {

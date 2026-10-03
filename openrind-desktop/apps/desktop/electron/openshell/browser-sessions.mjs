@@ -49,7 +49,8 @@ export function createBrowserSessions({ runtime, installSandbox = installBrowser
             sandboxes.delete(sandboxName);
           }
         }
-        throw new Error('Browser sandbox provisioning failed');
+        console.error('Browser sandbox provisioning error details:', error);
+        throw new Error(`Browser sandbox provisioning failed: ${error?.message || error}`, { cause: error });
       }
       if (closed || entry.retired || !runtime.ready) throw new Error('Browser sandbox is unavailable');
       const lease = await createBrowserPtyLease(runtime, scope, policy, { onLost });

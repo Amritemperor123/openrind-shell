@@ -30,6 +30,15 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
       await broker.navigate(view.viewId, owner, initialUrl).catch(() => {});
     }
 
+    try {
+      event.sender.send('openrind-desktop:browser:event', {
+        type: 'start',
+        viewId: view.viewId,
+        conversationId,
+        url: initialUrl || 'about:blank',
+      });
+    } catch {}
+
     return {
       ok: true,
       viewId: view.viewId,
@@ -43,6 +52,13 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     const { viewId, owner = 'desktop_user', url } = opts;
     if (!viewId || !url) throw new BrowserFault('INVALID_ARGUMENT');
     const res = await broker.navigate(viewId, owner, url);
+    try {
+      event.sender.send('openrind-desktop:browser:event', {
+        type: 'navigate',
+        viewId,
+        url: res.url,
+      });
+    } catch {}
     return { ok: true, url: res.url, documentGeneration: res.documentGeneration };
   });
 
@@ -54,6 +70,13 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     } else if (sessionId) {
       broker.destroySession(sessionId);
     }
+    try {
+      event.sender.send('openrind-desktop:browser:event', {
+        type: 'stop',
+        viewId,
+        sessionId,
+      });
+    } catch {}
     return { ok: true, closed: true };
   });
 

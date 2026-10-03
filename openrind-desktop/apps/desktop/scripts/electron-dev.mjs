@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -203,6 +204,19 @@ process.once("SIGINT", () => void stopAll(130));
 process.once("SIGTERM", () => void stopAll(143));
 
 runSync(nodeCmd, [resolve(__dirname, "prepare-sidecar.mjs"), "--force", "--outdir", electronSidecarDir], { cwd: desktopRoot, shell: false });
+
+const browserPkgDir = resolve(repoRoot, "packaging", "browser-client");
+const browserManifest = resolve(browserPkgDir, "browser-runtime", "runtime-manifest.json");
+if (!existsSync(browserManifest)) {
+  console.log("[openrind-desktop] Staging browser runtime...");
+  try {
+    runSync(nodeCmd, ["build.mjs"], { cwd: browserPkgDir, shell: false });
+    runSync(nodeCmd, ["stage-runtime.mjs", process.execPath], { cwd: browserPkgDir, shell: false });
+    console.log("[openrind-desktop] Browser runtime staged successfully.");
+  } catch (err) {
+    console.warn("[openrind-desktop] Warning: failed to stage browser runtime:", err.message);
+  }
+}
 
 const initialProbeUrls = [startUrl, ...viteProbeUrls].filter(Boolean);
 let viteReady = false;

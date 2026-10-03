@@ -255,6 +255,11 @@ export async function ensureManagedFuseGateway({ onProgress } = {}) {
         }
       }
 
+      await wslRun(
+        ["-d", DISTRO_NAME, "--", runtime.cli, "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
+        { timeout: 10_000 }
+      ).catch(() => {});
+
       if (upToDate) return { endpoint, reused: true };
 
       onProgress?.({
@@ -263,6 +268,10 @@ export async function ensureManagedFuseGateway({ onProgress } = {}) {
       });
       await provisionManagedGateway(runtime);
       await waitForGateway(runtime, endpoint);
+      await wslRun(
+        ["-d", DISTRO_NAME, "--", runtime.cli, "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
+        { timeout: 10_000 }
+      ).catch(() => {});
       return { endpoint, reused: false };
     })().finally(() => {
       startupPromise = null;

@@ -29,8 +29,8 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
   const serviceToken = randomBytes(32).toString('base64url');
   const container = `openrind-browser-${bindingId}`;
   // Do not inherit Node injection settings, model credentials or database URLs.
-  const env = {};
-  for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'PATH']) if (process.env[key]) env[key] = process.env[key];
+  const env = { OPENRIND_ENABLE_LOCAL_PROVIDER: '1' };
+  for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'PATH', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'OPENRIND_ENABLE_LOCAL_PROVIDER']) if (process.env[key]) env[key] = process.env[key];
   const worker = fork(join(resourceRoot, 'worker.cjs'), [], {
     execPath: nodeExecutable, execArgv: ['--experimental-sqlite'], env,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'], windowsHide: true,
