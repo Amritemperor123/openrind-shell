@@ -22,7 +22,7 @@ const isOpenRouterKey = Boolean(openRouterKey) || anthropicKey.startsWith('sk-or
 const defaultKey = isOpenRouterKey ? (openRouterKey || anthropicKey) : (anthropicKey || openRouterKey);
 const provider = isOpenRouterKey ? 'openrouter' : (process.env.W8_HALOOP_PROVIDER || 'anthropic');
 const adminToken = process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || 'w8-catalog-simulation-admin';
-const defaultModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || process.env.OPENRIND_SHELL_OPENHANDS_MODEL || 'qwen/qwen3.8-27b:free';
+const defaultModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || process.env.OPENRIND_SHELL_OPENHANDS_MODEL || 'openrouter/free';
 
 function resolveProjectName() {
   let raw = (
@@ -182,13 +182,18 @@ const server = http.createServer((req, res) => {
 
     // If using OpenRouter, adapt /v1/messages to OpenRouter /v1/chat/completions
     if (isMessages && body && isOpenRouterKey) {
-      const chosenModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || (
-        body.model && !body.model.startsWith('claude-') ? body.model : defaultModel
-      );
+      const chosenModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || defaultModel;
+      const candidates = [
+        chosenModel,
+        'nvidia/nemotron-3-super-120b-a12b:free',
+        'qwen/qwen3.8-27b:free'
+      ];
+      const fallbackModels = [...new Set(candidates)].slice(0, 3);
       const openAiMessages = anthropicToOpenAiMessages(body);
       const openAiTools = anthropicToOpenAiTools(body.tools);
       const payloadObj = {
         model: chosenModel,
+        models: fallbackModels,
         messages: openAiMessages,
         max_tokens: Math.max(Number(body.max_tokens) || 4096, 4096),
         stream: isStream,
@@ -331,7 +336,10 @@ const server = http.createServer((req, res) => {
           let activeToolCalls = new Map(); // tool_call_index -> anthropic blockIndex
           let hasToolCalls = false;
           let totalOutputTokens = 0;
+          let accumulatedReasoning = '';
           let sseBuffer = '';
+
+          const wantsThinking = Boolean(body?.thinking && body.thinking.type === 'enabled');
 
           upstreamRes.on('data', chunk => {
             sseBuffer += chunk.toString('utf8');
@@ -353,21 +361,24 @@ const server = http.createServer((req, res) => {
                 const toolCallsPiece = delta.tool_calls;
 
                 if (reasoningPiece) {
-                  totalOutputTokens++;
-                  if (!inThinking && !inText && activeToolCalls.size === 0) {
-                    inThinking = true;
-                    res.write(`event: content_block_start\ndata: ${JSON.stringify({
-                      type: 'content_block_start',
-                      index: blockIndex,
-                      content_block: { type: 'thinking', thinking: '' }
-                    })}\n\n`);
-                  }
-                  if (inThinking) {
-                    res.write(`event: content_block_delta\ndata: ${JSON.stringify({
-                      type: 'content_block_delta',
-                      index: blockIndex,
-                      delta: { type: 'thinking_delta', thinking: reasoningPiece }
-                    })}\n\n`);
+                  accumulatedReasoning += reasoningPiece;
+                  if (wantsThinking) {
+                    totalOutputTokens++;
+                    if (!inThinking && !inText && activeToolCalls.size === 0) {
+                      inThinking = true;
+                      res.write(`event: content_block_start\ndata: ${JSON.stringify({
+                        type: 'content_block_start',
+                        index: blockIndex,
+                        content_block: { type: 'thinking', thinking: '' }
+                      })}\n\n`);
+                    }
+                    if (inThinking) {
+                      res.write(`event: content_block_delta\ndata: ${JSON.stringify({
+                        type: 'content_block_delta',
+                        index: blockIndex,
+                        delta: { type: 'thinking_delta', thinking: reasoningPiece }
+                      })}\n\n`);
+                    }
                   }
                 }
 
@@ -475,11 +486,17 @@ const server = http.createServer((req, res) => {
             }
             activeToolCalls.clear();
 
-            if (blockIndex === 0) {
+            if (blockIndex === 0 && !hasToolCalls) {
+              const fallbackText = accumulatedReasoning.trim() || 'Hello! How can I help you?';
               res.write(`event: content_block_start\ndata: ${JSON.stringify({
                 type: 'content_block_start',
                 index: 0,
-                content_block: { type: 'text', text: 'Hello! I am ready.' }
+                content_block: { type: 'text', text: '' }
+              })}\n\n`);
+              res.write(`event: content_block_delta\ndata: ${JSON.stringify({
+                type: 'content_block_delta',
+                index: 0,
+                delta: { type: 'text_delta', text: fallbackText }
               })}\n\n`);
               res.write(`event: content_block_stop\ndata: ${JSON.stringify({
                 type: 'content_block_stop',
@@ -557,6 +574,12 @@ const server = http.createServer((req, res) => {
     }
     clientReq.end();
   });
+});
+
+server.on('error', err => {
+  if (err.code === 'EADDRINUSE') {
+    process.exit(0);
+  }
 });
 
 server.listen(8785, '127.0.0.1', () => {});

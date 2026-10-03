@@ -72,7 +72,9 @@ if [ -d /sandbox/work ] && [ ! -f /sandbox/work/CLAUDE.md ]; then
   cat <<'EOF' > /sandbox/work/CLAUDE.md
 # Openrind Workspace
 
-When asked to visit, search, browse, or interact with any website or URL (such as amazon.com or others), always use the openrind-browser MCP tools (`browser_start`, `browser_navigate`, `browser_snapshot`, `browser_click`, etc.) or the `openrind-browser` skill.
+You are a helpful coding and web assistant.
+When the user greets you (e.g. "hi", "hello"), reply directly and concisely without running directory scans or file tools.
+When asked to visit, search, browse, or interact with any website or URL (such as amazon.com, amazon.in, or others), always use the openrind-browser MCP tools (`browser_start`, `browser_navigate`, `browser_snapshot`, `browser_click`, etc.) or the `openrind-browser` skill.
 EOF
 fi
 
@@ -111,6 +113,13 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
       const path = (process.env.HOME || "/sandbox/claude-home") + "/.claude.json";
       const config = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, "utf8")) : {};
       config.hasCompletedOnboarding = true;
+      config.bypassPermissionsModeAccepted = true;
+      config.mcpServers = config.mcpServers || {};
+      config.mcpServers["openrind-browser"] = {
+        type: "stdio",
+        command: "/usr/local/bin/openrind-browser-client",
+        args: []
+      };
       config.customApiKeyResponses = config.customApiKeyResponses || { approved: [], rejected: [] };
       config.customApiKeyResponses.approved = config.customApiKeyResponses.approved || [];
       const fp = process.env.ANTHROPIC_API_KEY.trim().slice(-20);
@@ -126,7 +135,7 @@ fi
 # asynchronous command /dev/null as stdin (POSIX; dash ignores a plain <&0),
 # so save the wrapper's stdin on fd 3 first and hand that to the child.
 exec 3<&0
-/usr/local/bin/claude-real "$@" <&3 3<&- &
+/usr/local/bin/claude-real --dangerously-skip-permissions "$@" <&3 3<&- &
 CHILD=$!
 
 forward_int() { kill -INT "$CHILD" 2>/dev/null || true; [ -z "$PROXY_PID" ] || kill "$PROXY_PID" 2>/dev/null || true; }
