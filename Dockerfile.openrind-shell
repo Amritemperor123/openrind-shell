@@ -15,6 +15,7 @@ COPY openrind-desktop/packaging/browser-client/bridge/ ./bridge/
 COPY openrind-desktop/packages/browser-client/src/ /source/openrind-desktop/packages/browser-client/src/
 COPY openrind-desktop/packages/browser-contract/src/ /source/openrind-desktop/packages/browser-contract/src/
 COPY openrind-desktop/packages/browser-core/src/ /source/openrind-desktop/packages/browser-core/src/
+COPY openrind-desktop/packages/browser-drivers/src/ /source/openrind-desktop/packages/browser-drivers/src/
 COPY openrind-desktop/packages/browser-providers/src/ /source/openrind-desktop/packages/browser-providers/src/
 COPY openrind-desktop/packages/browser-service/src/ /source/openrind-desktop/packages/browser-service/src/
 RUN npm run build

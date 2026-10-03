@@ -841,7 +841,7 @@ async function stageProfiles(run, serialized) {
     `install -d -m 0700 ${HALOOP_STATE_DIR}`,
     `install -d -o 10001 -g 10001 -m 0700 ${HALOOP_COLLECTOR_DATA_DIR}`,
     `install -d -o 10001 -g 10001 -m 0700 ${HALOOP_REPORTS_DIR}`,
-    `if [ -d ${HALOOP_PROFILES_FILE} ]; then rm -rf ${HALOOP_PROFILES_FILE}; fi`,
+    `if [ -d "${HALOOP_PROFILES_FILE}" ]; then rm -rf "${HALOOP_PROFILES_FILE}"; fi`,
     `install -m 0600 /dev/stdin ${HALOOP_PROFILES_FILE}.tmp`,
     `mv -f ${HALOOP_PROFILES_FILE}.tmp ${HALOOP_PROFILES_FILE}`,
   ].join("\n");

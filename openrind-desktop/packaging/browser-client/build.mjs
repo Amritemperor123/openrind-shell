@@ -18,6 +18,7 @@ const built = await build({
   alias: {
     '@openrind/browser-contract': fileURLToPath(new URL('../../packages/browser-contract/src/index.mjs', import.meta.url)),
     '@openrind/browser-core': fileURLToPath(new URL('../../packages/browser-core/src/index.mjs', import.meta.url)),
+    '@openrind/browser-drivers': fileURLToPath(new URL('../../packages/browser-drivers/src/index.mjs', import.meta.url)),
     '@openrind/browser-providers': fileURLToPath(new URL('../../packages/browser-providers/src/index.mjs', import.meta.url)),
     zod: fileURLToPath(new URL('./node_modules/zod', import.meta.url)),
   },
