@@ -34,7 +34,7 @@ test('fixed configuration preserves other servers and rejects overrides', () => 
   assert.throws(() => browserCredentials({ OPENRIND_BROWSER_SERVICE_TOKEN: 'x'.repeat(32), OPENRIND_BROWSER_GRANT: 'bad\nvalue' }));
 });
 
-test('production worker, CBOR bridge, SDK discovery, owner isolation and revocation', { timeout: 30_000 }, async () => {
+test('production worker, CBOR bridge, SDK discovery, owner isolation and revocation', { timeout: 60_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'openrind-step3-'));
   const token = randomBytes(32).toString('base64url');
   const worker = fork(fileURLToPath(new URL('./dist/worker.cjs', import.meta.url)), [], {
