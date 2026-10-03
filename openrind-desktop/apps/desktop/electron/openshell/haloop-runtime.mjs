@@ -265,7 +265,7 @@ export function buildHaloopProfilesDocument(
           .update(requiredSecret(profile.clientToken, "Haloop client token"), "utf8")
           .digest("hex"),
         config: {
-          provider: "anthropic",
+          provider: upstream.mode === "openrouter-test" ? "openrouter" : "anthropic",
           api_key: upstream.apiKey,
           // TEMPORARY OPENROUTER TEST WORKAROUND: remove these two fields and
           // the matching env-gated resolver after the live integration proof.
@@ -1844,9 +1844,8 @@ export function createHaloopRuntimeManager({
             { timeout: 60_000 },
           );
           if (started.exitCode !== 0) {
-            throw new Error(
-              `Could not restart the managed Haloop container: ${(started.stderr || started.stdout).trim() || `exit ${started.exitCode}`}`,
-            );
+            await run(dockerArgs("rm", "-f", HALOOP_CONTAINER_NAME), { timeout: 15_000 });
+            await createGatewayContainer(run, profileHash);
           }
           gatewayStartedThisOperation = true;
         }
