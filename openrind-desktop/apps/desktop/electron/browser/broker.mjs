@@ -106,6 +106,12 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
           if (bounds) {
             view.setBounds(bounds);
           }
+          mainWindow.webContents.send('openrind-desktop:browser:event', {
+            type: 'start',
+            viewId,
+            conversationId,
+            url: 'about:blank',
+          });
         } catch {}
       }
 
@@ -134,8 +140,19 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       try {
         record.documentGeneration++;
         await record.wc.loadURL(targetUrl);
+        const currentUrl = record.wc.getURL();
+        const mainWindow = getMainWindow?.();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            mainWindow.webContents.send('openrind-desktop:browser:event', {
+              type: 'navigate',
+              viewId,
+              url: currentUrl,
+            });
+          } catch {}
+        }
         return {
-          url: record.wc.getURL(),
+          url: currentUrl,
           documentGeneration: record.documentGeneration,
         };
       } catch (err) {

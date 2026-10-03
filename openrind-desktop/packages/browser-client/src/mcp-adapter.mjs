@@ -83,8 +83,9 @@ export async function startMcpAdapter({ sdk, networking, descriptor, env, localT
     await remote.connect(transport);
     await server.connect(new sdk.StdioServerTransport());
     return { close };
-  } catch {
+  } catch (err) {
+    console.error("REMOTE CONNECT ERROR:", err);
     await close();
-    throw new Error('Browser MCP connection failed');
+    throw new Error(`Browser MCP connection failed: ${err?.message || err}`, { cause: err });
   }
 }

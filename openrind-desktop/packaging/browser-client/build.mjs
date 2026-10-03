@@ -7,7 +7,7 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const output = new URL('./dist/', import.meta.url);
 const hashes = {};
 await mkdir(output, { recursive: true });
-const entries = [['entry.mjs', 'client'], ['preflight-entry.mjs', 'preflight'], ['provision-entry.mjs', 'provision'], ['edge-entry.mjs', 'edge'], ['worker-entry.mjs', 'worker']];
+const entries = [['entry.mjs', 'client'], ['preflight-entry.mjs', 'preflight'], ['provision-entry.mjs', 'provision'], ['edge-entry.mjs', 'edge'], ['worker-entry.mjs', 'worker'], ['cli-entry.mjs', 'cli']];
 if (process.argv.includes('--checks')) entries.push(['native-check.mjs', 'native-check']);
 for (const [entry, name] of entries) {
 const built = await build({

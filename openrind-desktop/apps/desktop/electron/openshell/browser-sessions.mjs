@@ -37,7 +37,7 @@ export function createBrowserSessions({ runtime, installSandbox = installBrowser
           const provider = await attachBrowserProvider({ ...runtime, sandboxName,
             bindingId: `${runtime.bindingId}_${sandboxName}` });
           entry.provider = provider;
-          await installSandbox({ sandboxName, descriptor: provider.descriptor, networkPolicy: provider.networkPolicy });
+          await installSandbox({ sandboxName, descriptor: provider.descriptor, networkPolicy: provider.networkPolicy, serviceToken: runtime.serviceToken });
         })();
       }
       try { await entry.preparing; }
@@ -59,7 +59,7 @@ export function createBrowserSessions({ runtime, installSandbox = installBrowser
         throw new Error('Browser sandbox closed during launch');
       }
       let stopped;
-      const tracked = Object.freeze({ token: lease.token, activate: lease.activate,
+      const tracked = Object.freeze({ token: lease.token, serviceToken: runtime.serviceToken, activate: lease.activate,
         stop() {
           return stopped ??= lease.stop().then(() => { entry.leases.delete(tracked); }, error => {
             stopped = undefined; throw error;

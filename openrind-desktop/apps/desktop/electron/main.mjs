@@ -683,13 +683,14 @@ async function writeOpenrindShellSessionMarker(
   agentSessionId,
   haloopSessionAssertion,
   browserGrant,
+  browserServiceToken,
 ) {
   const value = openrindShell.resolveAgentSessionValue(
     profile,
     agentSessionId,
     haloopSessionAssertion,
   );
-  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant);
+  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken);
 }
 
 // Agent sessions are CONCURRENT: a sandbox hosts one live PTY per Openrind Desktop
@@ -823,22 +824,50 @@ function openOpenrindShellPtySession(opts) {
       if (prepareBrowserLease) {
         browserLease = await prepareBrowserLease();
       } else if (profile === 'openrind-shell-claude' || profile === 'openrind-shell-openhands' || profile === 'openrind-shell-openhands-script' || profile === 'openrind-shell-openclaw') {
-        try {
-          browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
-        } catch (error) {
-          console.warn('Browser runtime setup failed; proceeding without browser lease:', error);
-          browserLease = undefined;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
+            break;
+          } catch (error) {
+            console.warn(`Browser runtime setup attempt ${attempt} failed:`, error);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+            else browserLease = undefined;
+          }
         }
+      }
+
+      if (browserLease?.token && browserLease?.serviceToken) {
+        const token = browserLease.token;
+        const sToken = browserLease.serviceToken;
+        wslRun(['-d', OPENSHELL_DISTRO_NAME, '--', 'sh', '-c', `
+          id="$(docker ps -q --filter label=openshell.ai/sandbox-name=${sandboxName} | head -n1)"
+          if [ -n "$id" ]; then
+            docker exec -u 0 "$id" sh -c "
+              mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime
+              printf '%s' '${sToken}' > /etc/openrind-browser/service-token
+              chmod 644 /etc/openrind-browser/service-token
+              printf '%s' '${token}' > /var/lib/openrind-shell/runtime/browser-grant
+              printf 'export OPENRIND_BROWSER_GRANT=%s\\nexport OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n' '${token}' '${sToken}' > /var/lib/openrind-shell/runtime/browser.env
+              chmod 666 /var/lib/openrind-shell/runtime/browser.env /var/lib/openrind-shell/runtime/browser-grant
+              chown 1000:1000 /var/lib/openrind-shell/runtime/browser.env /var/lib/openrind-shell/runtime/browser-grant
+            "
+          fi
+        `], { timeout: 10_000 }).catch(() => {});
       }
       let ptyExited = false;
       let opened;
       try {
+      let upstreamKey = "";
+      try { upstreamKey = await openrindShell.requiredHaloopUpstreamApiKey(); } catch {}
+      upstreamKey = (upstreamKey || process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY || "").trim();
       await writeOpenrindShellSessionMarker(
         sandboxName,
         profile,
         agentSessionId,
         haloopSessionAssertion,
         browserLease?.token,
+        browserLease?.serviceToken,
+        upstreamKey,
       );
       // Even a desktop launch without a session id writes the `auto` marker, so
       // every fresh connect must wait for this marker to be consumed.

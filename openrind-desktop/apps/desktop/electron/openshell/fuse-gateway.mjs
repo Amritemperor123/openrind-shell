@@ -229,38 +229,22 @@ export async function ensureManagedFuseGateway({ onProgress } = {}) {
     startupPromise = (async () => {
       await ensureDistroRunning();
       let runtime;
-      if (process.resourcesPath && !process.env.OPENRIND_DESKTOP_FUSE_RUNTIME_DIR) {
+      try {
         runtime = await resolveDistroRuntime();
-      } else {
-        try { runtime = resolveManagedFuseRuntime(); }
-        catch (error) {
-          if (process.env.OPENRIND_DESKTOP_FUSE_RUNTIME_DIR) throw error;
-          runtime = await resolveDistroRuntime();
-        }
+      } catch {
+        runtime = resolveManagedFuseRuntime();
       }
       const endpoint = resolvedEndpoint();
       activateRuntime(runtime, endpoint);
 
       const existing = await gatewayInfo(runtime, endpoint);
-      
-      let upToDate = false;
       if (existing.exitCode === 0) {
-        const sourceId = runtimeId(runtime);
-        const checkInstall = await wslRun(
-          ["-d", DISTRO_NAME, "--", "sh", "-c", `cat ${RUNTIME_DIR}/source-id 2>/dev/null || true`],
-          { timeout: 5000 }
-        ).catch(() => null);
-        if (checkInstall && checkInstall.exitCode === 0 && checkInstall.stdout.trim() === sourceId) {
-          upToDate = true;
-        }
+        await wslRun(
+          ["-d", DISTRO_NAME, "--", "/opt/openrind-desktop/fuse-runtime/openshell", "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
+          { timeout: 10_000 }
+        ).catch(() => {});
+        return { endpoint, reused: true };
       }
-
-      await wslRun(
-        ["-d", DISTRO_NAME, "--", runtime.cli, "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
-        { timeout: 10_000 }
-      ).catch(() => {});
-
-      if (upToDate) return { endpoint, reused: true };
 
       onProgress?.({
         phase: "gateway",
@@ -269,7 +253,7 @@ export async function ensureManagedFuseGateway({ onProgress } = {}) {
       await provisionManagedGateway(runtime);
       await waitForGateway(runtime, endpoint);
       await wslRun(
-        ["-d", DISTRO_NAME, "--", runtime.cli, "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
+        ["-d", DISTRO_NAME, "--", "/opt/openrind-desktop/fuse-runtime/openshell", "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
         { timeout: 10_000 }
       ).catch(() => {});
       return { endpoint, reused: false };

@@ -20,7 +20,8 @@ async function main() {
     for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, () => peer.close());
   } catch (error) { peer.close(); throw error; }
 }
-main().catch(() => {
+main().catch((err) => {
+  console.error('openrind-browser: edge startup error:', err);
   process.stderr.write('openrind-browser: edge startup failed\n');
   process.exitCode = 1;
 });

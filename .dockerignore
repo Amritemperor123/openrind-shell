@@ -20,6 +20,7 @@ openrind-desktop/packaging/browser-client/*
 !openrind-desktop/packaging/browser-client/provision-entry.mjs
 !openrind-desktop/packaging/browser-client/edge-entry.mjs
 !openrind-desktop/packaging/browser-client/worker-entry.mjs
+!openrind-desktop/packaging/browser-client/cli-entry.mjs
 !openrind-desktop/packaging/browser-client/bridge/
 !openrind-desktop/packaging/browser-client/bridge/**
 !openrind-desktop/packaging/browser-client/mcp.json

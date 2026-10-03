@@ -5,12 +5,13 @@ export { createLocalTransfers, assertPathBeneath, verifyNoSymlinkEscape };
 export const clientToolDefinitions = () => toolDefinitions({ local: true });
 export function validateClientRequest(name, input) { return parseTool(name, input, { local: true }); }
 export async function routeClientRequest(name, input, { remote, localTransfers }) {
-  const args = validateClientRequest(name, input);
-  if (LOCAL_TOOLS.includes(name)) {
+  const cleanName = String(name ?? '').replace(/^mcp__openrind_browser__/, '');
+  const args = validateClientRequest(cleanName, input);
+  if (LOCAL_TOOLS.includes(cleanName)) {
     if (!localTransfers) throw new BrowserFault('CAPABILITY_UNAVAILABLE');
-    return localTransfers(name, args);
+    return localTransfers(cleanName, args);
   }
-  return remote(name, args);
+  return remote(cleanName, args);
 }
 // Approved filesystem transfer adapters remain a later step; no host path is
 // forwarded as a remote tool request. The stdio adapter lives in mcp-adapter.mjs.

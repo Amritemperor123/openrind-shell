@@ -167,7 +167,47 @@ function anthropicToOpenAiTools(tools) {
   }));
 }
 
+function mapToolNameToClient(name, clientToolNames = []) {
+  if (!name) return name;
+  if (clientToolNames.includes(name)) return name;
+
+  // 1. Try prefixing with mcp__openrind_browser__
+  const mcpPrefixed = `mcp__openrind_browser__${name}`;
+  if (clientToolNames.includes(mcpPrefixed)) return mcpPrefixed;
+
+  // 2. Convert PascalCase / camelCase to snake_case and check with prefix
+  const snake = name.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '');
+  const mcpSnake = `mcp__openrind_browser__${snake}`;
+  if (clientToolNames.includes(mcpSnake)) return mcpSnake;
+  if (clientToolNames.includes(snake)) return snake;
+
+  // 3. Extract core action (e.g. "start" from "browser_start" or "BrowserStart")
+  const core = snake.replace(/^(?:mcp__)?(?:openrind_)?(?:browser_)?/, '');
+  const corePrefixed = `mcp__openrind_browser__browser_${core}`;
+  if (clientToolNames.includes(corePrefixed)) return corePrefixed;
+  const coreBrowser = `browser_${core}`;
+  if (clientToolNames.includes(coreBrowser)) return coreBrowser;
+
+  // 4. Try matching case-insensitively
+  const match = clientToolNames.find(t =>
+    t.toLowerCase() === name.toLowerCase() ||
+    t.toLowerCase() === mcpPrefixed.toLowerCase() ||
+    t.toLowerCase() === mcpSnake.toLowerCase() ||
+    t.toLowerCase() === corePrefixed.toLowerCase() ||
+    t.toLowerCase() === coreBrowser.toLowerCase()
+  );
+  if (match) return match;
+
+  return name;
+}
+
 const server = http.createServer((req, res) => {
+  console.error('PROXY REQ:', req.method, req.url);
+  if (req.url === '/healthz' || req.url === '/health' || req.url === '/api/hello' || req.url?.startsWith('/api/hello')) {
+    res.writeHead(200, { 'content-type': 'application/json', 'content-length': 0 });
+    res.end();
+    return;
+  }
   let chunks = [];
   req.on('data', c => chunks.push(c));
   req.on('end', () => {
@@ -182,6 +222,7 @@ const server = http.createServer((req, res) => {
 
     // If using OpenRouter, adapt /v1/messages to OpenRouter /v1/chat/completions
     if (isMessages && body && isOpenRouterKey) {
+      const clientToolNames = Array.isArray(body?.tools) ? body.tools.map(t => t.name) : [];
       const chosenModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || defaultModel;
       const candidates = [
         chosenModel,
@@ -272,10 +313,11 @@ const server = http.createServer((req, res) => {
                 for (const tc of msg.tool_calls) {
                   let input = {};
                   try { input = JSON.parse(tc.function?.arguments || '{}'); } catch {}
+                  const mappedName = mapToolNameToClient(tc.function?.name, clientToolNames);
                   content.push({
                     type: 'tool_use',
                     id: tc.id || `call_${randomBytes(8).toString('hex')}`,
-                    name: tc.function?.name,
+                    name: mappedName,
                     input,
                   });
                 }
@@ -432,13 +474,14 @@ const server = http.createServer((req, res) => {
                     if (!activeToolCalls.has(idx)) {
                       const curBlock = blockIndex++;
                       activeToolCalls.set(idx, curBlock);
+                      const mappedName = mapToolNameToClient(tc.function?.name || 'tool', clientToolNames);
                       res.write(`event: content_block_start\ndata: ${JSON.stringify({
                         type: 'content_block_start',
                         index: curBlock,
                         content_block: {
                           type: 'tool_use',
                           id: tc.id || `call_${randomBytes(8).toString('hex')}`,
-                          name: tc.function?.name || 'tool',
+                          name: mappedName,
                           input: {}
                         }
                       })}\n\n`);

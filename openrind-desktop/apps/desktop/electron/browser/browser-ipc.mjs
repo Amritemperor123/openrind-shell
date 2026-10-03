@@ -107,12 +107,20 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     checkSender(event);
     const { viewId, bounds } = opts;
     if (viewId && bounds) {
-      broker.setBounds(viewId, {
-        x: Math.max(0, Math.floor(bounds.x || 0)),
-        y: Math.max(0, Math.floor(bounds.y || 0)),
-        width: Math.max(10, Math.floor(bounds.width || 10)),
-        height: Math.max(10, Math.floor(bounds.height || 10)),
-      });
+      const w = Math.floor(bounds.width || 0);
+      const h = Math.floor(bounds.height || 0);
+      if (w <= 0 || h <= 0) {
+        broker.setBounds(viewId, { x: 0, y: 0, width: 0, height: 0 });
+        broker.setVisible(viewId, false);
+      } else {
+        broker.setBounds(viewId, {
+          x: Math.max(0, Math.floor(bounds.x || 0)),
+          y: Math.max(0, Math.floor(bounds.y || 0)),
+          width: w,
+          height: h,
+        });
+        broker.setVisible(viewId, true);
+      }
     }
     return { ok: true };
   });

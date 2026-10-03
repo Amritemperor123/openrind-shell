@@ -28,8 +28,8 @@ async function main() {
   };
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, stop);
 }
-main().catch(() => {
-  // Never emit credential-bearing HTTP errors or corrupt the MCP stdout stream.
-  process.stderr.write(`openrind-browser: client startup failed (${stage})\n`);
+main().catch((err) => {
+  process.stderr.write(`openrind-browser: client startup failed (${stage}): ${err?.message || err}\n`);
+  if (err?.cause) process.stderr.write(`cause: ${err.cause?.message || err.cause}\n`);
   process.exitCode = 1;
 });

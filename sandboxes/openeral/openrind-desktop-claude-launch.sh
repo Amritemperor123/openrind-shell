@@ -15,6 +15,14 @@ if [ -f "$RUNTIME_DIR/session.env" ]; then
   . "$RUNTIME_DIR/session.env"
 fi
 
+if [ -f "$RUNTIME_DIR/browser.env" ]; then
+  # shellcheck disable=SC1090
+  . "$RUNTIME_DIR/browser.env"
+fi
+if [ -z "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ] && [ -f /etc/openrind-browser/service-token ]; then
+  export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat /etc/openrind-browser/service-token 2>/dev/null || true)"
+fi
+
 MARKER_PATH="$RUNTIME_DIR/desktop-claude-launch"
 
 if [ ! -f "$MARKER_PATH" ]; then
@@ -126,6 +134,7 @@ else
   # Reassert the fixed Haloop endpoint and remove persisted bypass state before
   # every new or resumed Claude process. Failure is fatal: direct inference is
   # not a supported recovery path in this image contract.
+  export OPENRIND_SHELL_CLAUDE_HOME="${OPENRIND_SHELL_CLAUDE_HOME:-/sandbox/claude-home}"
   node /opt/openrind-shell/configure-haloop.mjs
   if [ -f "$RUNTIME_DIR/anthropic-base-url" ]; then
     export ANTHROPIC_BASE_URL="$(cat "$RUNTIME_DIR/anthropic-base-url" 2>/dev/null | tr -d '\r\n ')"

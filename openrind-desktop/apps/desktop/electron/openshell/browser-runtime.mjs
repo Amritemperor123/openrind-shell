@@ -28,6 +28,9 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
   if (mapped.exitCode !== 0 || !edgePath.startsWith('/') || /[\r\n,]/.test(edgePath)) throw new Error('Browser edge resource is unavailable');
   const serviceToken = randomBytes(32).toString('base64url');
   const container = `openrind-browser-${bindingId}`;
+
+  // Clean up any stale browser edge containers holding the port from a previous run
+  await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c', 'docker ps -q --filter name=openrind-browser- | xargs -r docker rm -f'], { timeout: 15_000 }).catch(() => {});
   // Do not inherit Node injection settings, model credentials or database URLs.
   const env = { OPENRIND_ENABLE_LOCAL_PROVIDER: '1' };
   for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'PATH', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'OPENRIND_ENABLE_LOCAL_PROVIDER']) if (process.env[key]) env[key] = process.env[key];
@@ -67,8 +70,10 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
     });
     return closing;
   };
+  let diagnostics = '';
   const failed = () => {
     const wasReady = ready;
+    if (diagnostics.trim()) console.error('startBrowserRuntime edge diagnostics:', diagnostics);
     void close().catch(() => {});
     if (wasReady) { try { onDisconnect(); } catch { /* Cleanup must continue. */ } }
   };
@@ -108,7 +113,8 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
     await started;
     if (closing) throw new Error('Browser runtime disconnected');
     ready = true;
-  } catch {
+  } catch (err) {
+    console.error('startBrowserRuntime inner error:', err);
     await close().catch(() => {});
     throw new Error('Browser runtime startup failed');
   } finally { clearTimeout(startupTimer); startupReject = undefined; }

@@ -30,7 +30,7 @@ const CLAUDE_SESSION_NAMESPACE = "6f9b1e2a-0c3d-4b7a-9e21-8a4c1d5f7b30";
 const MAX_CAPTURE_BYTES = 2 * 1024 * 1024;
 const sandboxProvisioning = createSandboxProvisioningCoordinator();
 
-async function requiredHaloopUpstreamApiKey() {
+export async function requiredHaloopUpstreamApiKey() {
   const anthropicApiKey = await getCredential("anthropicApiKey");
   return resolveHaloopUpstreamApiKey(anthropicApiKey);
 }
@@ -524,7 +524,7 @@ export async function resolveOpenrindShellSandboxWorkspaceId(options = {}) {
       "--format",
       `{{ index .Labels "com.openrind.desktop.workspace" }}`,
     ],
-    { timeout: 15_000 },
+    { timeout: 45_000 },
   ).catch(() => null);
   const recorded = inspected?.exitCode === 0 ? validatedWorkspaceId(inspected.stdout) : null;
   if (recorded) return recorded;
@@ -548,7 +548,7 @@ async function ensureAgentHomeVolume(sandboxName, workspaceId, agent) {
       `com.openrind.desktop.workspace=${workspaceId}`,
       volumeName,
     ],
-    { timeout: 15_000 },
+    { timeout: 45_000 },
   );
   if (result.exitCode !== 0) {
     throw new Error(
@@ -689,6 +689,10 @@ async function provisionOpenrindShellSandbox(options) {
       (databaseUrl.startsWith('"') && databaseUrl.endsWith('"'))) {
     databaseUrl = databaseUrl.slice(1, -1).trim();
   }
+  let anthropicApiKey = "";
+  try {
+    anthropicApiKey = await requiredHaloopUpstreamApiKey();
+  } catch {}
   const haloop = await prepareRequiredHaloop({ name, workspaceId, agent, onProgress });
   const replaced = haloop.replaced;
   await requireFuseImage(onProgress);
@@ -779,9 +783,17 @@ async function provisionOpenrindShellSandbox(options) {
     sandboxArgs.push("--env", `W8_HALOOP_PROVIDER=${activeProvider}`);
     const activeAdminToken = (process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || "w8-catalog-simulation-admin").trim();
     sandboxArgs.push("--env", `ADMIN_TOKEN=${activeAdminToken}`);
-    const activeOpenrouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
-    if (activeOpenrouterKey) {
-      sandboxArgs.push("--env", `OPENROUTER_API_KEY=${activeOpenrouterKey}`);
+    const activeKey = (
+      anthropicApiKey ||
+      process.env.OPENROUTER_API_KEY ||
+      process.env.ANTHROPIC_API_KEY ||
+      ""
+    ).trim();
+    if (activeKey.startsWith("sk-or-") || activeProvider === "openrouter") {
+      sandboxArgs.push("--env", `OPENROUTER_API_KEY=${activeKey}`);
+      sandboxArgs.push("--env", `ANTHROPIC_API_KEY=${activeKey}`);
+    } else if (activeKey) {
+      sandboxArgs.push("--env", `ANTHROPIC_API_KEY=${activeKey}`);
     }
     const activeOpenrouterModel = (process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || "").trim();
     if (activeOpenrouterModel) {

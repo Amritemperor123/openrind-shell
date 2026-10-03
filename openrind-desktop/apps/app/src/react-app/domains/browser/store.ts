@@ -73,14 +73,23 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
       target = `https://${target}`;
     }
     try {
+      const activeId = stateRef.current.activeTabId || stateRef.current.tabs[0]?.pageId;
+      const cleanTitle = target === 'about:blank' ? 'New Tab' : target.replace(/^https?:\/\//, '');
       setState(s => ({
         ...s,
         currentUrl: target,
         trustedOrigin: target.startsWith('https://') ? new URL(target).origin : null,
+        tabs: s.tabs.map(t => t.pageId === activeId ? { ...t, url: target, title: cleanTitle } : t),
       }));
       if (electron?.browser?.navigate && stateRef.current.viewId) {
         const res = await electron.browser.navigate({ viewId: stateRef.current.viewId, url: target });
-        setState(s => ({ ...s, currentUrl: res.url }));
+        const finalUrl = res.url || target;
+        const finalTitle = finalUrl === 'about:blank' ? 'New Tab' : finalUrl.replace(/^https?:\/\//, '');
+        setState(s => ({
+          ...s,
+          currentUrl: finalUrl,
+          tabs: s.tabs.map(t => t.pageId === activeId ? { ...t, url: finalUrl, title: finalTitle } : t),
+        }));
       }
     } catch (err: any) {
       setState(s => ({ ...s, error: err?.message || 'Navigation failed' }));
@@ -157,6 +166,62 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     return unsub;
   }, [electron]);
 
+  const openTab = useCallback(async (url: string = 'about:blank') => {
+    const newPageId = `bp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newTab: BrowserTab = {
+      pageId: newPageId,
+      url: url,
+      title: url === 'about:blank' ? 'New Tab' : 'Page',
+      documentGeneration: 1,
+    };
+    setState(s => ({
+      ...s,
+      tabs: [...s.tabs, newTab],
+      activeTabId: newPageId,
+      currentUrl: url,
+    }));
+    if (url !== 'about:blank' && electron?.browser?.navigate && stateRef.current.viewId) {
+      await navigate(url);
+    }
+  }, [electron, navigate]);
+
+  const closeTab = useCallback((pageId: string) => {
+    setState(s => {
+      const remaining = s.tabs.filter(t => t.pageId !== pageId);
+      if (remaining.length === 0) {
+        return {
+          ...s,
+          tabs: [{ pageId: 'bp_main', url: 'about:blank', documentGeneration: 1 }],
+          activeTabId: 'bp_main',
+          currentUrl: 'about:blank',
+        };
+      }
+      const nextActive = s.activeTabId === pageId ? remaining[remaining.length - 1].pageId : s.activeTabId;
+      const nextTab = remaining.find(t => t.pageId === nextActive) || remaining[0];
+      return {
+        ...s,
+        tabs: remaining,
+        activeTabId: nextActive,
+        currentUrl: nextTab.url,
+      };
+    });
+  }, []);
+
+  const selectTab = useCallback(async (pageId: string) => {
+    const tab = stateRef.current.tabs.find(t => t.pageId === pageId);
+    if (!tab) return;
+    setState(s => ({
+      ...s,
+      activeTabId: pageId,
+      currentUrl: tab.url,
+    }));
+    if (electron?.browser?.navigate && stateRef.current.viewId && tab.url) {
+      try {
+        await electron.browser.navigate({ viewId: stateRef.current.viewId, url: tab.url });
+      } catch {}
+    }
+  }, [electron]);
+
   return {
     state,
     startSession,
@@ -166,5 +231,8 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     resumeControl,
     setBounds,
     setVisible,
+    openTab,
+    closeTab,
+    selectTab,
   };
 }

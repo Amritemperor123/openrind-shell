@@ -607,6 +607,16 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
   // can show "Launch session" on first open vs "Reconnect" after a drop.
   const [hasEverConnected, setHasEverConnected] = useState(false);
   const [browserOpen, setBrowserOpen] = useState(false);
+  const [browserWidth, setBrowserWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem("openrind_browser_panel_width");
+      return saved ? Math.max(380, Math.min(1400, Number(saved))) : 540;
+    } catch {
+      return 540;
+    }
+  });
+  const [isBrowserExpanded, setIsBrowserExpanded] = useState(false);
+  const isDraggingBrowserRef = useRef(false);
   const browser = useBrowserStore(props.sessionId || sandboxName || expectedSandboxName || "default_sandbox");
 
   useEffect(() => {
@@ -616,7 +626,7 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
       } catch {}
     }, 50);
     return () => clearTimeout(timer);
-  }, [browserOpen]);
+  }, [browserOpen, browserWidth, isBrowserExpanded]);
 
   // True when the current error message means the sandbox must be deleted
   // before a retry can succeed (stuck-provisioning or container error state).
@@ -1749,7 +1759,46 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
         </div>
 
         {browserOpen || browser.state.isOpen ? (
-          <aside style={{ width: 380, minWidth: 320 }} className="flex flex-col border-l border-dls-border bg-dls-surface z-20">
+          <aside
+            style={{
+              width: isBrowserExpanded ? "calc(100% - 60px)" : browserWidth,
+              minWidth: 380,
+              maxWidth: "calc(100% - 60px)",
+              position: isBrowserExpanded ? "absolute" : "relative",
+              right: 0,
+              top: 0,
+              bottom: 0,
+            }}
+            className="flex flex-col border-l border-dls-border bg-dls-surface z-20 h-full overflow-hidden"
+          >
+            {!isBrowserExpanded && (
+              <div
+                className="absolute left-0 top-0 bottom-0 w-2 -ml-1 cursor-col-resize z-30 hover:bg-emerald-500/50 transition-colors"
+                title="Drag to resize browser panel"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  isDraggingBrowserRef.current = true;
+                  const startX = e.clientX;
+                  const startW = browserWidth;
+                  const onMove = (moveEvt: MouseEvent) => {
+                    if (!isDraggingBrowserRef.current) return;
+                    const delta = startX - moveEvt.clientX;
+                    const nextW = Math.max(380, Math.min(window.innerWidth - 120, startW + delta));
+                    setBrowserWidth(nextW);
+                    try {
+                      localStorage.setItem("openrind_browser_panel_width", String(nextW));
+                    } catch {}
+                  };
+                  const onUp = () => {
+                    isDraggingBrowserRef.current = false;
+                    window.removeEventListener("mousemove", onMove);
+                    window.removeEventListener("mouseup", onUp);
+                  };
+                  window.addEventListener("mousemove", onMove);
+                  window.addEventListener("mouseup", onUp);
+                }}
+              />
+            )}
             <BrowserPanel
               state={browser.state}
               onStart={browser.startSession}
@@ -1762,6 +1811,11 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
                 setBrowserOpen(false);
                 browser.setVisible(false);
               }}
+              isExpanded={isBrowserExpanded}
+              onToggleExpand={() => setIsBrowserExpanded((prev) => !prev)}
+              onOpenTab={browser.openTab}
+              onCloseTab={browser.closeTab}
+              onSelectTab={browser.selectTab}
             />
           </aside>
         ) : null}

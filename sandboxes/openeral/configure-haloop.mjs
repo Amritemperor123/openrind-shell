@@ -10,21 +10,14 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
-const isTestingOpenRouter =
-  Boolean(process.env.OPENROUTER_API_KEY) ||
-  String(process.env.OPENRIND_DESKTOP_HALOOP_TEST_OPENROUTER || "").trim() === "1" ||
-  String(process.env.ANTHROPIC_API_KEY || "").trim().startsWith("sk-or-");
-
-export const HALOOP_ANTHROPIC_BASE_URL = isTestingOpenRouter
-  ? "http://127.0.0.1:8785"
-  : (process.env.HALOOP_ANTHROPIC_BASE_URL || process.env.HALOOP_GATEWAY_URL || "http://136.112.93.84:8787");
+export const HALOOP_ANTHROPIC_BASE_URL = "http://127.0.0.1:8785";
 
 const workspaceHome =
   process.env.OPENRIND_SHELL_HOME ||
   process.env.OPENERAL_HOME ||
   "/sandbox/work";
 const claudeHome =
-  process.env.OPENRIND_SHELL_CLAUDE_HOME || workspaceHome;
+  process.env.OPENRIND_SHELL_CLAUDE_HOME || "/sandbox/claude-home";
 const agent = process.env.OPENRIND_SHELL_AGENT || "claude";
 const runtimeDir =
   process.env.OPENRIND_SHELL_RUNTIME_DIR ||
@@ -120,16 +113,14 @@ function configureClaudeHome() {
 }
 
 function main() {
-  configureSettings(join(workspaceHome, ".claude", "settings.json"));
-  if (agent === "claude" && claudeHome !== workspaceHome) {
+  // Clean up any workspace-level settings files that cause FUSE vetting errors in Claude Code
+  try {
+    rmSync(join(workspaceHome, ".claude"), { recursive: true, force: true });
+    rmSync(join(workspaceHome, ".claude.json"), { force: true });
+  } catch {}
+
+  if (agent === "claude") {
     configureClaudeHome();
-  } else if (agent === "claude") {
-    const configPath = join(claudeHome, ".claude.json");
-    const config = readObject(configPath);
-    config.hasCompletedOnboarding = true;
-    config.customApiKeyResponses = { approved: ["ANTHROPIC_API_KEY"] };
-    config.apiKeyApproval = "approved";
-    writeObject(configPath, config);
   }
 
   mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });

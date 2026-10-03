@@ -10,6 +10,11 @@ export interface BrowserPanelProps {
   onResume: () => Promise<void>;
   onSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => void;
   onClosePanel?: () => void;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+  onOpenTab?: (url?: string) => void;
+  onCloseTab?: (pageId: string) => void;
+  onSelectTab?: (pageId: string) => void;
 }
 
 export function BrowserPanel({
@@ -21,6 +26,11 @@ export function BrowserPanel({
   onResume,
   onSetBounds,
   onClosePanel,
+  isExpanded,
+  onToggleExpand,
+  onOpenTab,
+  onCloseTab,
+  onSelectTab,
 }: BrowserPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -41,12 +51,13 @@ export function BrowserPanel({
     const updateGeometry = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const next = {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
+      const x = Math.max(0, Math.round(rect.left));
+      const y = Math.max(0, Math.round(rect.top));
+      const maxWidth = Math.max(0, window.innerWidth - x);
+      const maxHeight = Math.max(0, window.innerHeight - y);
+      const width = Math.min(Math.round(rect.width), maxWidth);
+      const height = Math.min(Math.round(rect.height), maxHeight);
+      const next = { x, y, width, height };
       if (
         lastBoundsRef.current &&
         lastBoundsRef.current.x === next.x &&
@@ -85,6 +96,13 @@ export function BrowserPanel({
   const isHumanControl = state.status === 'human_control';
   const isExecuting = state.status === 'executing';
   const isRunning = state.status !== 'idle' && state.status !== 'closed' && state.status !== 'error';
+
+  useEffect(() => {
+    if (!state.isOpen || !isRunning) {
+      onSetBounds({ x: 0, y: 0, width: 0, height: 0 });
+      lastBoundsRef.current = null;
+    }
+  }, [state.isOpen, isRunning, onSetBounds]);
 
   return (
     <div style={{
@@ -161,6 +179,24 @@ export function BrowserPanel({
             </button>
           )}
 
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              title={isExpanded ? 'Collapse panel' : 'Expand full width'}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#a1a1aa',
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: '2px 4px',
+              }}
+            >
+              {isExpanded ? '🗗' : '⛶'}
+            </button>
+          )}
+
           {onClosePanel && (
             <button
               onClick={onClosePanel}
@@ -177,6 +213,86 @@ export function BrowserPanel({
           )}
         </div>
       </div>
+
+      {/* Multiple Tabs Strip */}
+      {state.tabs.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '4px 8px 0 8px',
+          gap: '4px',
+          backgroundColor: '#141416',
+          borderBottom: '1px solid #2e2e38',
+          overflowX: 'auto',
+        }}>
+          {state.tabs.map((tab) => {
+            const isActive = tab.pageId === (state.activeTabId || state.tabs[0]?.pageId);
+            return (
+              <div
+                key={tab.pageId}
+                onClick={() => onSelectTab?.(tab.pageId)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '4px 8px',
+                  borderRadius: '4px 4px 0 0',
+                  backgroundColor: isActive ? '#222227' : '#18181b',
+                  color: isActive ? '#f4f4f5' : '#71717a',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  border: '1px solid #2e2e38',
+                  borderBottom: isActive ? '1px solid #222227' : '1px solid #2e2e38',
+                  maxWidth: '140px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                <span>🌐</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tab.title || (tab.url === 'about:blank' ? 'New Tab' : tab.url.replace(/^https?:\/\//, ''))}
+                </span>
+                {state.tabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseTab?.(tab.pageId);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#71717a',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '0 2px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => onOpenTab?.()}
+            title="Open new tab"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#a1a1aa',
+              cursor: 'pointer',
+              padding: '2px 8px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+            }}
+          >
+            +
+          </button>
+        </div>
+      )}
 
       {/* URL & Navigation Strip */}
       <div style={{

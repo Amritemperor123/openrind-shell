@@ -73,7 +73,8 @@ async function main() {
   });
   send({ type: 'ready', protocol: 1 });
 }
-main().catch(() => {
+main().catch((err) => {
+  console.error('openrind-browser: worker startup error:', err);
   process.stderr.write('openrind-browser: worker startup failed\n');
   process.exitCode = 1;
   stop();
