@@ -5,6 +5,7 @@ export interface BrowserPanelProps {
   state: BrowserPanelState;
   onStart: (provider: BrowserProviderKind, url?: string) => Promise<void>;
   onStop: () => Promise<void>;
+  onNavigate?: (url: string) => Promise<void>;
   onTakeControl: () => Promise<void>;
   onResume: () => Promise<void>;
   onSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => void;
@@ -15,40 +16,69 @@ export function BrowserPanel({
   state,
   onStart,
   onStop,
+  onNavigate,
   onTakeControl,
   onResume,
   onSetBounds,
   onClosePanel,
 }: BrowserPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<BrowserProviderKind>(state.provider || 'local-chromium');
   const [inputUrl, setInputUrl] = useState(state.currentUrl === 'about:blank' ? '' : state.currentUrl);
 
-  // Sync geometry on resize/scroll/DIP changes
+  useEffect(() => {
+    if (state.currentUrl && state.currentUrl !== 'about:blank') {
+      setInputUrl(state.currentUrl);
+    }
+  }, [state.currentUrl]);
+
+  // Sync geometry on resize/scroll/DIP changes without infinite loops
   useEffect(() => {
     if (!containerRef.current || !state.isOpen) return;
 
+    let rafId: number | null = null;
     const updateGeometry = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      onSetBounds({
+      const next = {
         x: Math.round(rect.left),
         y: Math.round(rect.top),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+      };
+      if (
+        lastBoundsRef.current &&
+        lastBoundsRef.current.x === next.x &&
+        lastBoundsRef.current.y === next.y &&
+        lastBoundsRef.current.width === next.width &&
+        lastBoundsRef.current.height === next.height
+      ) {
+        return;
+      }
+      lastBoundsRef.current = next;
+      onSetBounds(next);
+    };
+
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateGeometry();
       });
     };
 
-    updateGeometry();
-    const observer = new ResizeObserver(updateGeometry);
+    scheduleUpdate();
+    const observer = new ResizeObserver(scheduleUpdate);
     observer.observe(containerRef.current);
-    window.addEventListener('resize', updateGeometry);
-    window.addEventListener('scroll', updateGeometry, true);
+    window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('scroll', scheduleUpdate, true);
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       observer.disconnect();
-      window.removeEventListener('resize', updateGeometry);
-      window.removeEventListener('scroll', updateGeometry, true);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('scroll', scheduleUpdate, true);
     };
   }, [state.isOpen, onSetBounds]);
 
@@ -172,10 +202,18 @@ export function BrowserPanel({
           </span>
           <input
             type="text"
-            value={state.currentUrl !== 'about:blank' ? state.currentUrl : inputUrl}
-            placeholder="Enter https:// URL..."
-            disabled={isRunning}
+            value={inputUrl}
+            placeholder="Enter https:// URL and press Enter..."
             onChange={e => setInputUrl(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && inputUrl) {
+                if (isRunning && onNavigate) {
+                  void onNavigate(inputUrl);
+                } else {
+                  void onStart(selectedProvider, inputUrl);
+                }
+              }
+            }}
             style={{
               flex: 1,
               backgroundColor: 'transparent',
@@ -185,6 +223,25 @@ export function BrowserPanel({
               fontSize: '12px',
             }}
           />
+          {inputUrl ? (
+            <button
+              onClick={() => {
+                if (isRunning && onNavigate) void onNavigate(inputUrl);
+                else void onStart(selectedProvider, inputUrl);
+              }}
+              style={{
+                backgroundColor: '#3f3f46',
+                color: '#e4e4e7',
+                border: 'none',
+                borderRadius: '3px',
+                padding: '1px 6px',
+                fontSize: '11px',
+                cursor: 'pointer',
+              }}
+            >
+              Go
+            </button>
+          ) : null}
         </div>
 
         {/* Human Handoff Controls */}

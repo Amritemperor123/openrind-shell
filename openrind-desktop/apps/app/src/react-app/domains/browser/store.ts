@@ -66,6 +66,27 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     setState(s => ({ ...defaultState, isOpen: false }));
   }, [electron]);
 
+  const navigate = useCallback(async (url: string) => {
+    if (!url) return;
+    let target = url.trim();
+    if (!target.startsWith('https://') && !target.startsWith('http://') && target !== 'about:blank') {
+      target = `https://${target}`;
+    }
+    try {
+      setState(s => ({
+        ...s,
+        currentUrl: target,
+        trustedOrigin: target.startsWith('https://') ? new URL(target).origin : null,
+      }));
+      if (electron?.browser?.navigate && stateRef.current.viewId) {
+        const res = await electron.browser.navigate({ viewId: stateRef.current.viewId, url: target });
+        setState(s => ({ ...s, currentUrl: res.url }));
+      }
+    } catch (err: any) {
+      setState(s => ({ ...s, error: err?.message || 'Navigation failed' }));
+    }
+  }, [electron]);
+
   const takeControl = useCallback(async () => {
     try {
       if (electron?.browser?.takeControl && stateRef.current.viewId) {
@@ -117,6 +138,7 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     state,
     startSession,
     stopSession,
+    navigate,
     takeControl,
     resumeControl,
     setBounds,
