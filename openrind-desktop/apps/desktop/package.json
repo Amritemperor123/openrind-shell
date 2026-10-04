@@ -37,6 +37,8 @@
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {
+    "@openrind/browser-core": "workspace:*",
+    "@openrind/browser-providers": "workspace:*",
     "@tauri-apps/cli": "^2.0.0",
     "electron": "^35.0.0",
     "electron-builder": "^25.1.8",

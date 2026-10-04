@@ -32,7 +32,7 @@ export async function startStandaloneBrowserServer({
 }) {
   if (!databasePath) throw new Error('Database path required');
   const effectiveServiceToken = serviceToken || randomBytes(32).toString('base64url');
-  const effectiveOperatorToken = operatorToken || effectiveServiceToken;
+  const effectiveOperatorToken = operatorToken || randomBytes(32).toString('base64url');
 
   const service = createStandaloneService({ databasePath, providers, ...options });
 

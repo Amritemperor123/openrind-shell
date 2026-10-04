@@ -66,6 +66,20 @@ export function createBrowserbaseProvider(options = {}) {
     kind: 'browserbase',
     capabilities,
 
+    validateConnectUrl(connectUrlStr) {
+      let connectUrl;
+      try {
+        connectUrl = new URL(connectUrlStr);
+      } catch {
+        throw new BrowserFault('BACKEND_UNAVAILABLE');
+      }
+      if (connectUrl.protocol !== 'wss:' ||
+          !(connectUrl.hostname === 'connect.browserbase.com' || connectUrl.hostname.endsWith('.browserbase.com') || options.allowTestHost)) {
+        throw new BrowserFault('POLICY_DENIED');
+      }
+      return connectUrlStr;
+    },
+
     async create(spec, ctx) {
       if (ctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
       if (spec.provider !== 'browserbase') throw new BrowserFault('CAPABILITY_UNAVAILABLE');
@@ -99,19 +113,7 @@ export function createBrowserbaseProvider(options = {}) {
 
       const remoteSessionId = sessionData.id;
       const connectUrlStr = sessionData.connectUrl;
-
-      // Validate connect URL for security: must be wss and end with browserbase.com
-      let connectUrl;
-      try {
-        connectUrl = new URL(connectUrlStr);
-      } catch {
-        throw new BrowserFault('BACKEND_UNAVAILABLE');
-      }
-
-      if (connectUrl.protocol !== 'wss:' ||
-          !(connectUrl.hostname === 'connect.browserbase.com' || connectUrl.hostname.endsWith('.browserbase.com') || options.allowTestHost)) {
-        throw new BrowserFault('POLICY_DENIED');
-      }
+      this.validateConnectUrl(connectUrlStr);
 
       let browser;
       try {
@@ -170,6 +172,7 @@ export function createBrowserbaseProvider(options = {}) {
       try {
         const state = await api(`sessions/${remoteSessionId}`, null, 'GET');
         if (state?.status === 'RUNNING' && state?.connectUrl) {
+          this.validateConnectUrl(state.connectUrl);
           const browser = await customConnect(state.connectUrl);
           const context = browser.contexts()[0] || await browser.newContext({ acceptDownloads: true });
           const initialPages = context.pages();

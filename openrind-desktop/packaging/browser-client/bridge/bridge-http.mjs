@@ -6,15 +6,15 @@ const MAX_BODY = 1024 * 1024;
 const requestNames = new Set(["authorization", "x-openrind-browser-grant", "accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"]);
 const responseNames = new Set(["content-type", "mcp-session-id", "mcp-protocol-version", "cache-control", "allow"]);
 const ignoredRequestNames = new Set(["host", "connection", "content-length", "transfer-encoding", "user-agent", "accept-encoding", "accept-language", "sec-fetch-mode"]);
-function selectedHeaders(headers, names, strict = false) {
+function selectedHeaders(headers, names) {
   const selected = {};
   for (const [name, value] of Object.entries(headers)) {
-    if (!names.has(name)) {
-      if (strict && !ignoredRequestNames.has(name)) throw new Error("Unsupported header");
+    const lower = name.toLowerCase();
+    if (!names.has(lower)) {
       continue;
     }
     if (typeof value !== "string" || value.length > 8192 || /[\r\n]/.test(value)) throw new Error("Invalid header");
-    selected[name] = value;
+    selected[lower] = value;
   }
   return selected;
 }

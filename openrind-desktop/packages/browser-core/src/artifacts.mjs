@@ -33,10 +33,13 @@ export class ArtifactsManager {
     if (currentUsage + byteCount > this.maxQuota) {
       throw new BrowserFault('RATE_LIMITED');
     }
+    // Atomically reserve quota before async write to prevent concurrent overcommit
+    this.ownerUsage.set(owner, currentUsage + byteCount);
 
     const id = newId('art');
     const sha256 = createHash('sha256').update(buffer).digest('hex');
     if (options.expectedSha256 && options.expectedSha256 !== sha256) {
+      this.ownerUsage.set(owner, (this.ownerUsage.get(owner) || byteCount) - byteCount);
       throw new BrowserFault('INVALID_ARGUMENT');
     }
 
@@ -44,8 +47,13 @@ export class ArtifactsManager {
     const mimeType = options.mimeType || 'application/octet-stream';
     const filePath = join(this.stagingDir, `${id}.dat`);
 
-    // Write file with exclusive mode
-    await writeFile(filePath, buffer, { flag: 'wx', mode: 0o600 });
+    try {
+      // Write file with exclusive mode
+      await writeFile(filePath, buffer, { flag: 'wx', mode: 0o600 });
+    } catch (err) {
+      this.ownerUsage.set(owner, (this.ownerUsage.get(owner) || byteCount) - byteCount);
+      throw err;
+    }
 
     const now = this.clock();
     const ttlMs = options.ttlMs || LIMITS.idleMs;
