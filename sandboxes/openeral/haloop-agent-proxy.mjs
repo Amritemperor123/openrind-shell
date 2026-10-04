@@ -5,11 +5,14 @@ import fs from 'node:fs';
 import { URL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
-let targetBase = process.env.HALOOP_GATEWAY_URL || 'http://136.112.93.84:8787';
+let targetBase = process.env.HALOOP_UPSTREAM_URL || process.env.HALOOP_GATEWAY_URL || 'http://host.openshell.internal:8787';
 if (targetBase.includes(':8785') || targetBase.includes('127.0.0.1:8785')) {
-  targetBase = 'http://136.112.93.84:8787';
+  targetBase = 'http://host.openshell.internal:8787';
 }
 const targetUrl = new URL(targetBase);
+if (targetUrl.protocol !== 'https:' && targetUrl.hostname !== '127.0.0.1' && targetUrl.hostname !== 'localhost' && targetUrl.hostname !== 'host.openshell.internal') {
+  throw new Error(`Insecure plain-HTTP upstream rejected: ${targetBase}`);
+}
 const isHttps = targetUrl.protocol === 'https:';
 const client = isHttps ? https : http;
 

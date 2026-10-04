@@ -68,7 +68,7 @@ case "$PWD" in
   /|/sandbox) cd /sandbox/work ;;
 esac
 
-if [ -d /sandbox/work ]; then
+if [ -d /sandbox/work ] && [ ! -f /sandbox/work/CLAUDE.md ]; then
   cat <<'EOF' > /sandbox/work/CLAUDE.md
 # Openrind Workspace
 
@@ -89,15 +89,11 @@ if [ -f "$RUNTIME_DIR/api-key.env" ]; then
   . "$RUNTIME_DIR/api-key.env"
 fi
 
-if [ -f "$RUNTIME_DIR/browser.env" ]; then
-  # shellcheck disable=SC1090
-  . "$RUNTIME_DIR/browser.env"
-fi
-if [ -z "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ] && [ -f /etc/openrind-browser/service-token ]; then
-  export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat /etc/openrind-browser/service-token 2>/dev/null || true)"
-fi
-if [ -z "${OPENRIND_BROWSER_GRANT:-}" ] && [ -f "$RUNTIME_DIR/browser-grant" ]; then
+if [ -f "$RUNTIME_DIR/browser-grant" ]; then
   export OPENRIND_BROWSER_GRANT="$(cat "$RUNTIME_DIR/browser-grant" 2>/dev/null || true)"
+fi
+if [ -f /etc/openrind-browser/service-token ]; then
+  export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat /etc/openrind-browser/service-token 2>/dev/null || true)"
 fi
 
 # Bundled skills are staged during setup, before Desktop reports the sandbox as
@@ -113,7 +109,8 @@ fi
 PROXY_PID=""
 if [ -f /opt/openrind-shell/haloop-agent-proxy.mjs ]; then
   pkill -f haloop-agent-proxy.mjs 2>/dev/null || true
-  export HALOOP_UPSTREAM_URL="${HALOOP_GATEWAY_URL:-http://136.112.93.84:8787}"
+  export HALOOP_GATEWAY_URL="${HALOOP_GATEWAY_URL:-${HALOOP_UPSTREAM_URL:-http://host.openshell.internal:8787}}"
+  export HALOOP_UPSTREAM_URL="$HALOOP_GATEWAY_URL"
   export NODE_USE_ENV_PROXY=1
   /usr/bin/node /opt/openrind-shell/haloop-agent-proxy.mjs &
   PROXY_PID=$!

@@ -90,7 +90,7 @@ function publicAddress(address) {
 }
 export async function validateDestination(value, policy, resolver = lookup) {
   let url; try { url = new URL(Url.parse(value)); } catch { throw new BrowserFault('POLICY_DENIED'); }
-  const originAllowed = policy.allowAnyPublicOrigin || policy.origins.length === 0 || policy.origins.includes(url.origin);
+  const originAllowed = Boolean(policy.allowAnyPublicOrigin) || (policy.origins.length > 0 && policy.origins.includes(url.origin));
   if (!originAllowed || url.hostname.endsWith('.localhost') || url.hostname === 'localhost') throw new BrowserFault('POLICY_DENIED');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   let addresses;

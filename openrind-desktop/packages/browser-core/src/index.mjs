@@ -266,17 +266,13 @@ export class BrowserCore {
           return { url: destination.href, documentGeneration: page.generation };
         }
         if (name === 'browser_snapshot') {
-          if (session.state === 'Uncertain' || !page.origin || (auth.policy.origins.length > 0 && !auth.policy.origins.includes(page.origin))) {
-            const currentPages = await live.pages();
-            const current = currentPages.find(p => p.pageId === page.id);
-            if (!current?.url || current.url === 'about:blank') {
-              if (current?.url && current.url !== 'about:blank') throw new BrowserFault('POLICY_DENIED');
-            } else {
-              const destination = await validateDestination(current.url, auth.policy, this.resolver);
-              page.origin = destination.origin;
-            }
+          const currentPages = await live.pages();
+          const current = currentPages.find(p => p.pageId === page.id);
+          if (current?.url && current.url !== 'about:blank') {
+            const destination = await validateDestination(current.url, auth.policy, this.resolver);
+            page.origin = destination.origin;
           }
-          if (page.origin && auth.policy.origins.length > 0 && !auth.policy.origins.includes(page.origin)) throw new BrowserFault('POLICY_DENIED');
+          if (page.origin && !auth.policy.allowAnyPublicOrigin && auth.policy.origins.length > 0 && !auth.policy.origins.includes(page.origin)) throw new BrowserFault('POLICY_DENIED');
           const raw = await live.page(args.pageId).snapshot(args, ctx);
           fresh();
           if (raw.documentGeneration < page.generation) throw new BrowserFault('STALE_REF');

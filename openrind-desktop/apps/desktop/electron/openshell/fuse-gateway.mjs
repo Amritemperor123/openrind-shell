@@ -238,7 +238,12 @@ export async function ensureManagedFuseGateway({ onProgress } = {}) {
       activateRuntime(runtime, endpoint);
 
       const existing = await gatewayInfo(runtime, endpoint);
-      if (existing.exitCode === 0) {
+      const installedSource = await wslRun(
+        ["-d", DISTRO_NAME, "--", "cat", `${RUNTIME_DIR}/source-id`],
+        { timeout: 5000 }
+      ).catch(() => ({ exitCode: -1, stdout: "" }));
+
+      if (existing.exitCode === 0 && installedSource.exitCode === 0 && installedSource.stdout.trim() === runtimeId(runtime)) {
         await wslRun(
           ["-d", DISTRO_NAME, "--", "/opt/openrind-desktop/fuse-runtime/openshell", "--gateway-endpoint", endpoint, "settings", "set", "--global", "--key", "providers_v2_enabled", "--value", "true", "--yes"],
           { timeout: 10_000 }

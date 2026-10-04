@@ -122,15 +122,19 @@ Usage:
         console.error('Failed to start browser:', structured.message || structured.code);
         process.exit(1);
       }
+      const data = structured.data || structured;
+      const sessionId = data.sessionId;
+      const sessionEpoch = data.sessionEpoch || 1;
+      const pageId = data.pageId || data.pages?.[0]?.pageId;
       saveSession({
-        sessionId: structured.sessionId,
-        sessionEpoch: structured.sessionEpoch || 1,
-        pageId: structured.pageId,
+        sessionId,
+        sessionEpoch,
+        pageId,
         provider,
         url: url || 'about:blank',
       });
       console.log(`Browser started (${provider})${url ? ` at ${url}` : ''}`);
-      console.log(`Session: ${structured.sessionId}, Page: ${structured.pageId}`);
+      console.log(`Session: ${sessionId}, Page: ${pageId}`);
     } else if (cmd === 'navigate') {
       let rawUrl = process.argv[shift];
       if (!rawUrl) { console.error('Usage: browser navigate <url>'); process.exit(1); }
@@ -144,10 +148,11 @@ Usage:
           arguments: { provider: 'desktop-webview', operationId, url },
         });
         const structured = res.structuredContent || JSON.parse(res.content?.[0]?.text || '{}');
+        const data = structured.data || structured;
         saveSession({
-          sessionId: structured.sessionId,
-          sessionEpoch: structured.sessionEpoch || 1,
-          pageId: structured.pageId,
+          sessionId: data.sessionId,
+          sessionEpoch: data.sessionEpoch || 1,
+          pageId: data.pageId || data.pages?.[0]?.pageId,
           provider: 'desktop-webview',
           url,
         });
@@ -182,7 +187,12 @@ Usage:
         },
       });
       const structured = res.structuredContent || JSON.parse(res.content?.[0]?.text || '{}');
-      const nodes = structured.nodes || [];
+      if (structured.ok === false) {
+        console.error('Snapshot failed:', structured.message || structured.code);
+        process.exit(1);
+      }
+      const data = structured.data || structured;
+      const nodes = data.nodes || [];
       const textOutput = formatSnapshotNodes(nodes);
       console.log(textOutput || 'Empty page snapshot');
     } else if (cmd === 'click') {

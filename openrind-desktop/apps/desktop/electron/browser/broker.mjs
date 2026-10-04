@@ -66,8 +66,8 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       wc.session.setPermissionRequestHandler((_w, _permission, callback) => callback(false));
       wc.session.setPermissionCheckHandler(() => false);
 
-      // Navigation guard
-      wc.on('will-navigate', (event, targetUrl) => {
+      // Navigation and redirect guard
+      const guardNavigation = (event, targetUrl) => {
         try {
           const u = new URL(targetUrl);
           if (u.protocol !== 'https:' && targetUrl !== 'about:blank') {
@@ -80,7 +80,10 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
         } catch {
           event.preventDefault();
         }
-      });
+      };
+
+      wc.on('will-navigate', guardNavigation);
+      wc.on('will-redirect', guardNavigation);
 
       // Detach and crash fencing: if debugger is detached or renderer crashes, fence view
       wc.debugger.on('detach', () => {

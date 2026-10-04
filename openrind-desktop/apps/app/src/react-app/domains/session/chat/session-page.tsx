@@ -550,10 +550,14 @@ export function SessionPage(props: SessionPageProps) {
                   state={browser.state}
                   onStart={browser.startSession}
                   onStop={browser.stopSession}
+                  onNavigate={browser.navigate}
                   onTakeControl={browser.takeControl}
                   onResume={browser.resumeControl}
                   onSetBounds={browser.setBounds}
                   onClosePanel={() => setRightSidebarExpanded(false)}
+                  onOpenTab={browser.openTab}
+                  onCloseTab={browser.closeTab}
+                  onSelectTab={browser.selectTab}
                 />
               </aside>
             ) : null}

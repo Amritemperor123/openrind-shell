@@ -24,10 +24,14 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
       allowedOrigins: allowedOrigins || [],
     });
 
-    await broker.initDebugger(view.viewId, owner).catch(() => {});
-
-    if (initialUrl) {
-      await broker.navigate(view.viewId, owner, initialUrl).catch(() => {});
+    try {
+      await broker.initDebugger(view.viewId, owner);
+      if (initialUrl) {
+        await broker.navigate(view.viewId, owner, initialUrl);
+      }
+    } catch (err) {
+      broker.destroyView(view.viewId);
+      throw err;
     }
 
     try {

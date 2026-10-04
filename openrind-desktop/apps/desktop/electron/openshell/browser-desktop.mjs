@@ -36,8 +36,8 @@ export function createDesktopBrowserController({ resourcesPath, userDataPath, on
       return active.prepare({ sandboxName, onLost,
         scope: { tenantId: id('local', userDataPath), workspaceId: id('workspace', workspaceId),
           sandboxId: id('sandbox', sandboxName), conversationId: id('conversation', conversationId) },
-        // Step 3 enables discovery/transport only. Until trusted destination UI
-        // lands, the empty explicit allowlist denies every navigation destination.
+        // Desktop policy explicitly opts into public origins (allowAnyPublicOrigin: true)
+        // so agents can browse public web resources like Amazon while blocking local/private destinations.
         policy: { revision: 1, providers: ['local-chromium', 'browserbase', 'desktop-webview'],
           origins: [], profiles: [], approveMutations: true, allowAnyPublicOrigin: true },
       });

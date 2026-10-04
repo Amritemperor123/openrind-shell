@@ -113,10 +113,10 @@ function configureClaudeHome() {
 }
 
 function main() {
-  // Clean up any workspace-level settings files that cause FUSE vetting errors in Claude Code
+  // Clean up only the specific conflicting settings files that cause FUSE vetting errors in Claude Code
   try {
-    rmSync(join(workspaceHome, ".claude"), { recursive: true, force: true });
-    rmSync(join(workspaceHome, ".claude.json"), { force: true });
+    rmSync(join(workspaceHome, ".claude", "settings.json"), { force: true });
+    rmSync(join(workspaceHome, ".claude", "settings.local.json"), { force: true });
   } catch {}
 
   if (agent === "claude") {

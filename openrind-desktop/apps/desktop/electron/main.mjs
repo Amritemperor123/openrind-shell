@@ -684,13 +684,14 @@ async function writeOpenrindShellSessionMarker(
   haloopSessionAssertion,
   browserGrant,
   browserServiceToken,
+  apiKey,
 ) {
   const value = openrindShell.resolveAgentSessionValue(
     profile,
     agentSessionId,
     haloopSessionAssertion,
   );
-  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken);
+  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken, apiKey);
 }
 
 // Agent sessions are CONCURRENT: a sandbox hosts one live PTY per Openrind Desktop
@@ -836,27 +837,6 @@ function openOpenrindShellPtySession(opts) {
         }
       }
 
-      if (browserLease?.token && browserLease?.serviceToken) {
-        const token = browserLease.token;
-        const sToken = browserLease.serviceToken;
-        wslRun(['-d', OPENSHELL_DISTRO_NAME, '--', 'sh', '-c', `
-          id="$(docker ps -q --filter label=openshell.ai/sandbox-name=${sandboxName} | head -n1)"
-          if [ -n "$id" ]; then
-            docker exec -u 0 "$id" sh -c "
-              mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime
-              printf '%s' '${sToken}' > /etc/openrind-browser/service-token
-              chmod 644 /etc/openrind-browser/service-token
-              printf '%s' '${token}' > /var/lib/openrind-shell/runtime/browser-grant
-              printf 'export OPENRIND_BROWSER_GRANT=%s\\nexport OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n' '${token}' '${sToken}' > /var/lib/openrind-shell/runtime/browser.env
-              chmod 666 /var/lib/openrind-shell/runtime/browser.env /var/lib/openrind-shell/runtime/browser-grant
-              chown 1000:1000 /var/lib/openrind-shell/runtime/browser.env /var/lib/openrind-shell/runtime/browser-grant
-            "
-          fi
-        `], { timeout: 10_000 }).catch(() => {});
-      }
-      let ptyExited = false;
-      let opened;
-      try {
       let upstreamKey = "";
       try { upstreamKey = await openrindShell.requiredHaloopUpstreamApiKey(); } catch {}
       upstreamKey = (upstreamKey || process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY || "").trim();
