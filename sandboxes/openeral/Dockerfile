@@ -96,7 +96,9 @@ RUN mkdir -p /etc/openrind-browser \
     && ln -sf /usr/local/bin/browser /usr/local/bin/browser_status \
     && ln -sf /usr/local/bin/browser /usr/local/bin/browser_tabs \
     && ln -sf /usr/local/bin/browser /usr/local/bin/browser_open \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_type
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_type \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_press \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_screenshot
 COPY sandboxes/openeral/openhands-agent.py /opt/openrind-openhands/openhands-agent.py
 COPY sandboxes/openeral/openrind-openhands-fuse.sh /usr/local/bin/openrind-openhands
 COPY sandboxes/openeral/openeral-claude-fuse.sh /usr/local/bin/claude

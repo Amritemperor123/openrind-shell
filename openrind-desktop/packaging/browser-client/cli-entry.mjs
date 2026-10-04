@@ -221,6 +221,44 @@ Usage:
         },
       });
       console.log(`Typed into [${ref}]: "${text}"`);
+    } else if (cmd === 'press' || cmd === 'key' || cmd === 'submit') {
+      let key = process.argv[shift] || 'Enter';
+      let ref = undefined;
+      if (process.argv[shift] && process.argv[shift].startsWith('h_')) {
+        ref = process.argv[shift];
+        key = process.argv[shift + 1] || 'Enter';
+      }
+      const session = readSession();
+      if (!session) { console.error('No active browser session.'); process.exit(1); }
+      const operationId = `op_${randomBytes(8).toString('hex')}`;
+      const args = {
+        sessionId: session.sessionId,
+        sessionEpoch: session.sessionEpoch,
+        pageId: session.pageId,
+        operationId,
+        key,
+      };
+      if (ref) args.ref = ref;
+      await client.callTool({
+        name: 'browser_press',
+        arguments: args,
+      });
+      console.log(`Pressed key: ${key}${ref ? ` on [${ref}]` : ''}`);
+    } else if (cmd === 'screenshot') {
+      const session = readSession();
+      if (!session) { console.error('No active browser session.'); process.exit(1); }
+      const operationId = `op_${randomBytes(8).toString('hex')}`;
+      const res = await client.callTool({
+        name: 'browser_screenshot',
+        arguments: {
+          sessionId: session.sessionId,
+          sessionEpoch: session.sessionEpoch,
+          pageId: session.pageId,
+          operationId,
+        },
+      });
+      const structured = res.structuredContent || JSON.parse(res.content?.[0]?.text || '{}');
+      console.log(`Screenshot captured: ${structured.artifactId || 'success'}`);
     } else if (cmd === 'close') {
       const session = readSession();
       if (session) {

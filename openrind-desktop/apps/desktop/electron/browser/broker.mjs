@@ -323,6 +323,10 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
             } else if (kind === 'press') {
               el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
               el.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+              if (key === 'Enter' && el.form) {
+                if (typeof el.form.requestSubmit === 'function') el.form.requestSubmit();
+                else el.form.submit();
+              }
             }
             return { ok: true };
           }})(${JSON.stringify(target.handle)}, ${JSON.stringify(kind)}, ${JSON.stringify(text || '')}, ${JSON.stringify(values || [])}, ${JSON.stringify(key || '')})`;
