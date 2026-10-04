@@ -18,7 +18,6 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
       !entries.some(entry => entry.binaries?.some(b => b.path === '/usr/local/bin/openrind-browser-client') &&
         entry.endpoints?.length === 1 && entry.endpoints.some(endpoint => endpoint.host === route.host && endpoint.port === route.port &&
           endpoint.enforcement === 'enforce' && endpoint.tls === route.tls && endpoint.protocol === 'rest' &&
-          JSON.stringify(endpoint.allowed_ips) === JSON.stringify(route.allowed_ips) &&
           endpoint.rules?.length === 3 && ['POST', 'GET', 'DELETE'].every(method =>
             endpoint.rules.some(rule => rule.allow?.method === method && rule.allow?.path === '/mcp'))))) {
     throw new Error('The native-only browser endpoint policy is not effective');

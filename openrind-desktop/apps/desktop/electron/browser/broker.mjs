@@ -15,6 +15,9 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
     if (record.fenced) {
       throw new BrowserFault('SESSION_LOST');
     }
+    if (record.humanControl && owner && owner !== 'desktop_user') {
+      throw new BrowserFault('ACTION_NOT_POSSIBLE');
+    }
     return record;
   }
 

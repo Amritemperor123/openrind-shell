@@ -49,6 +49,7 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
 
       const pageId = `bp_${randomBytes(12).toString('hex')}`;
       let currentDocGen = documentGeneration;
+      let currentUrl = 'about:blank';
 
       const pageDriver = {
         pageId,
@@ -57,6 +58,7 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
           if (nctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
           const res = await broker.navigate(viewId, owner, url);
           currentDocGen = res.documentGeneration;
+          currentUrl = res.url || url;
           return res;
         },
         async snapshot(options, sctx) {
@@ -80,11 +82,11 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
         handle,
         capabilities,
         async pages() {
-          return [{ pageId, documentGeneration: currentDocGen, url: 'about:blank' }];
+          return [{ pageId, documentGeneration: currentDocGen, url: currentUrl }];
         },
         async openPage(url, opctx) {
           if (url) await pageDriver.navigate(url, opctx);
-          return { pageId, documentGeneration: currentDocGen, url: 'about:blank' };
+          return { pageId, documentGeneration: currentDocGen, url: currentUrl };
         },
         page(id) {
           if (id !== pageId) throw new BrowserFault('SESSION_LOST');

@@ -20,7 +20,7 @@ export async function startMcpAdapter({ sdk, networking, descriptor, env, localT
   try { proxyUrl = new URL(proxy); } catch { throw new Error('Invalid OpenShell proxy'); }
   if (!['http:', 'https:'].includes(proxyUrl.protocol) || proxyUrl.username || proxyUrl.password ||
       proxyUrl.search || proxyUrl.hash || proxyUrl.pathname !== '/') throw new Error('Invalid OpenShell proxy');
-  const dispatcher = new networking.ProxyAgent(proxyUrl.href);
+  const dispatcher = new networking.ProxyAgent({ uri: proxyUrl.href, proxyTunnel: false });
   const remote = new sdk.Client({ name: 'openrind-browser-client', version: '0.0.0' });
   const server = new sdk.Server({ name: 'openrind-browser', version: '0.0.0' }, { capabilities: { tools: {} } });
   const transport = new sdk.StreamableHTTPClientTransport(new URL(fixed.endpoint), {

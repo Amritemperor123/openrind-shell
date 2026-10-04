@@ -21,7 +21,7 @@ const anthropicKey = (process.env.ANTHROPIC_API_KEY || '').trim();
 const isOpenRouterKey = Boolean(openRouterKey) || anthropicKey.startsWith('sk-or-') || (process.env.W8_HALOOP_PROVIDER === 'openrouter');
 const defaultKey = isOpenRouterKey ? (openRouterKey || anthropicKey) : (anthropicKey || openRouterKey);
 const provider = isOpenRouterKey ? 'openrouter' : (process.env.W8_HALOOP_PROVIDER || 'anthropic');
-const adminToken = process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || 'w8-catalog-simulation-admin';
+const adminToken = process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || '';
 const defaultModel = process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || process.env.OPENRIND_SHELL_OPENHANDS_MODEL || 'openrouter/free';
 
 function resolveProjectName() {
@@ -251,7 +251,7 @@ const server = http.createServer((req, res) => {
         'content-type': 'application/json',
         'content-length': Buffer.byteLength(openAiPayload),
         'x-w8-haloop-provider': 'openrouter',
-        'x-w8-haloop-admin-token': adminToken,
+        ...(adminToken ? { 'x-w8-haloop-admin-token': adminToken } : {}),
         'x-w8-haloop-metadata': JSON.stringify({ project: projectName }),
         'x-w8-haloop-config': JSON.stringify({
           input_guardrails: [{ 'halo.mark': { collectorURL: collectorUrl }, async: false, deny: false }],

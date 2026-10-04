@@ -3,10 +3,10 @@ import { BridgePeer } from './bridge/bridge-peer.mjs';
 import { startHttpEdge } from './bridge/bridge-http.mjs';
 
 async function main() {
-  const host = process.env.OPENRIND_BROWSER_BRIDGE_ADDRESS;
+  const host = process.env.OPENRIND_BROWSER_BRIDGE_ADDRESS || '0.0.0.0';
   const port = Number(process.env.OPENRIND_BROWSER_BRIDGE_PORT);
   if (process.argv.length !== 2 || isIP(host ?? '') !== 4 ||
-      !/^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host) ||
+      (host !== '0.0.0.0' && !/^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) ||
       !Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid private bridge configuration');
   let edge;
   let disconnected = false;

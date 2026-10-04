@@ -98,8 +98,8 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
         else request.reject(new Error('Browser control request failed'));
       });
       edge = wslSpawn(['-d', DISTRO_NAME, '--', 'docker', 'run', '--rm', '-i', '--name', container,
-        '--network', 'host', '--entrypoint', '/usr/bin/node',
-        '-e', `OPENRIND_BROWSER_BRIDGE_ADDRESS=${bridgeAddress}`, '-e', `OPENRIND_BROWSER_BRIDGE_PORT=${port}`,
+        '-p', `${port}:${port}`, '--entrypoint', '/usr/bin/node',
+        '-e', 'OPENRIND_BROWSER_BRIDGE_ADDRESS=0.0.0.0', '-e', `OPENRIND_BROWSER_BRIDGE_PORT=${port}`,
         '--mount', `type=bind,src=${edgePath},dst=/opt/openrind-browser-edge.cjs,readonly`, image, '/opt/openrind-browser-edge.cjs']);
       edge.once('error', failed); edge.once('exit', failed); edge.stdin.on('error', failed);
       edge.stdout.pipe(worker.stdin); worker.stdout.pipe(edge.stdin);

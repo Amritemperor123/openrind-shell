@@ -33,6 +33,7 @@
     "test:openshell:e2e": "node --test __tests__/openshell.spec.mjs"
   },
   "dependencies": {
+    "@openrind/browser-contract": "workspace:*",
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {

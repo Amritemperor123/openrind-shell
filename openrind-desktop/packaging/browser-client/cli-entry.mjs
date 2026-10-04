@@ -28,7 +28,7 @@ async function getClient() {
   const headers = browserCredentials(process.env);
   const proxy = process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY || process.env.https_proxy || 'http://10.200.0.1:3128';
   const proxyUrl = new URL(proxy);
-  const dispatcher = new ProxyAgent(proxyUrl.href);
+  const dispatcher = new ProxyAgent({ uri: proxyUrl.href, proxyTunnel: false });
   const client = new Client({ name: 'openrind-browser-cli', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(new URL(fixed.endpoint), {
     requestInit: { headers },

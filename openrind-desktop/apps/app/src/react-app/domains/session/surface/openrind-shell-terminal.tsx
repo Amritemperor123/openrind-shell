@@ -620,6 +620,12 @@ export function OpenrindShellTerminal(props: OpenrindShellTerminalProps) {
   const browser = useBrowserStore(props.sessionId || sandboxName || expectedSandboxName || "default_sandbox");
 
   useEffect(() => {
+    if (browser.state.isOpen) {
+      setBrowserOpen(true);
+    }
+  }, [browser.state.isOpen]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       try {
         fitRef.current?.fit();

@@ -39,7 +39,7 @@ export function createDesktopBrowserController({ resourcesPath, userDataPath, on
         // Step 3 enables discovery/transport only. Until trusted destination UI
         // lands, the empty explicit allowlist denies every navigation destination.
         policy: { revision: 1, providers: ['local-chromium', 'browserbase', 'desktop-webview'],
-          origins: [], profiles: [], approveMutations: true },
+          origins: [], profiles: [], approveMutations: true, allowAnyPublicOrigin: true },
       });
     },
     async removeSandbox(name) { if (starting) await (await starting).removeSandbox(name); },

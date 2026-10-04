@@ -82,9 +82,9 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
 
   ipcMain.handle('openrind-desktop:browser:take-control', async (event, opts = {}) => {
     checkSender(event);
-    const { viewId, owner } = opts;
+    const { viewId } = opts;
     const record = broker.views.get(viewId);
-    if (!record || (owner && record.owner !== owner)) throw new BrowserFault('SESSION_LOST');
+    if (!record || record.owner !== 'desktop_user') throw new BrowserFault('SESSION_LOST');
 
     // Handoff takeover: increments epoch, invalidating existing agent refs
     record.epoch++;
@@ -94,9 +94,9 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
 
   ipcMain.handle('openrind-desktop:browser:resume', async (event, opts = {}) => {
     checkSender(event);
-    const { viewId, owner } = opts;
+    const { viewId } = opts;
     const record = broker.views.get(viewId);
-    if (!record || (owner && record.owner !== owner)) throw new BrowserFault('SESSION_LOST');
+    if (!record || record.owner !== 'desktop_user') throw new BrowserFault('SESSION_LOST');
 
     record.epoch++;
     record.humanControl = false;

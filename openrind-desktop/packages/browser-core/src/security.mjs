@@ -68,7 +68,14 @@ export function validatePolicy(input) {
   });
   const profiles = (input.profiles || []).map(value => id.parse(value));
   if (profiles.length > 32) throw new Error('Profile policy limit');
-  return { revision: input.revision, providers, origins, profiles, approveMutations: input.approveMutations !== false };
+  return {
+    revision: input.revision,
+    providers,
+    origins,
+    profiles,
+    approveMutations: input.approveMutations !== false,
+    allowAnyPublicOrigin: Boolean(input.allowAnyPublicOrigin),
+  };
 }
 function publicAddress(address) {
   if (isIP(address) === 4) {
@@ -83,7 +90,7 @@ function publicAddress(address) {
 }
 export async function validateDestination(value, policy, resolver = lookup) {
   let url; try { url = new URL(Url.parse(value)); } catch { throw new BrowserFault('POLICY_DENIED'); }
-  const originAllowed = policy.origins.length === 0 || policy.origins.includes(url.origin);
+  const originAllowed = policy.allowAnyPublicOrigin || policy.origins.length === 0 || policy.origins.includes(url.origin);
   if (!originAllowed || url.hostname.endsWith('.localhost') || url.hostname === 'localhost') throw new BrowserFault('POLICY_DENIED');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   let addresses;
