@@ -1,6 +1,6 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { createBrowserService } from './index.mjs';
 import { createMcpHttpHandler } from './http.mjs';
 import { installedProviders } from '@openrind/browser-providers';
@@ -52,6 +52,14 @@ export async function startStandaloneBrowserServer({
   sweepTimer.unref();
 
   return new Promise((resolve, reject) => {
+    function isAuthorizedOperator(req) {
+      const auth = req.headers.authorization || '';
+      const expected = `Bearer ${effectiveOperatorToken}`;
+      const aBuf = createHash('sha256').update(auth).digest();
+      const bBuf = createHash('sha256').update(expected).digest();
+      return timingSafeEqual(aBuf, bBuf);
+    }
+
     const handler = async (req, res) => {
       // 1. Health endpoint
       if (req.url === '/health' && req.method === 'GET') {
@@ -79,8 +87,7 @@ export async function startStandaloneBrowserServer({
 
       // 3. Operator grant management endpoint: POST /v1/operator/grants
       if (req.url === '/v1/operator/grants' && req.method === 'POST') {
-        const auth = req.headers.authorization;
-        if (auth !== `Bearer ${effectiveOperatorToken}`) {
+        if (!isAuthorizedOperator(req)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized operator token' }));
           return;
@@ -104,8 +111,7 @@ export async function startStandaloneBrowserServer({
 
       // 4. Operator revoke grant endpoint: DELETE /v1/operator/grants/:id
       if (req.url?.startsWith('/v1/operator/grants/') && req.method === 'DELETE') {
-        const auth = req.headers.authorization;
-        if (auth !== `Bearer ${effectiveOperatorToken}`) {
+        if (!isAuthorizedOperator(req)) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized operator token' }));
           return;

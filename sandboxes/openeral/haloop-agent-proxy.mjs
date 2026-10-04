@@ -5,6 +5,13 @@ import fs from 'node:fs';
 import { URL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
+process.on('uncaughtException', err => {
+  console.error('PROXY UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', err => {
+  console.error('PROXY UNHANDLED REJECTION:', err);
+});
+
 let targetBase = process.env.HALOOP_UPSTREAM_URL || process.env.HALOOP_GATEWAY_URL || 'http://host.openshell.internal:8787';
 if (targetBase.includes(':8785') || targetBase.includes('127.0.0.1:8785')) {
   targetBase = 'http://host.openshell.internal:8787';
@@ -276,6 +283,16 @@ const server = http.createServer((req, res) => {
       }
 
       const upstream = sendUpstream('/v1/chat/completions', 'POST', forwardHeaders, upstreamRes => {
+        upstreamRes.on('error', err => {
+          console.error('Upstream response stream error:', err.message);
+          if (!res.headersSent) {
+            res.writeHead(502, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ error: { type: 'api_error', message: err.message } }));
+          } else {
+            res.end();
+          }
+        });
+
         if (upstreamRes.statusCode < 200 || upstreamRes.statusCode >= 300) {
           let errChunks = [];
           upstreamRes.on('data', c => errChunks.push(c));

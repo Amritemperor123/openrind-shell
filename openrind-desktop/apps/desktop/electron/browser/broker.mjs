@@ -7,6 +7,22 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
   const views = new Map(); // viewId -> record
   const sessions = new Map(); // sessionId -> Set of viewIds
 
+  function checkUrlAllowed(targetUrl, allowedOrigins = []) {
+    let u;
+    try {
+      u = new URL(targetUrl);
+    } catch {
+      throw new BrowserFault('POLICY_DENIED');
+    }
+    if (u.protocol !== 'https:' && targetUrl !== 'about:blank') {
+      throw new BrowserFault('POLICY_DENIED');
+    }
+    if (allowedOrigins.length > 0 && !allowedOrigins.includes(u.origin)) {
+      throw new BrowserFault('POLICY_DENIED');
+    }
+    return u;
+  }
+
   function getRecord(viewId, owner) {
     const record = views.get(viewId);
     if (!record || (owner && record.owner !== owner)) {
@@ -69,14 +85,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       // Navigation and redirect guard
       const guardNavigation = (event, targetUrl) => {
         try {
-          const u = new URL(targetUrl);
-          if (u.protocol !== 'https:' && targetUrl !== 'about:blank') {
-            event.preventDefault();
-            return;
-          }
-          if (record.allowedOrigins.length > 0 && !record.allowedOrigins.includes(u.origin)) {
-            event.preventDefault();
-          }
+          checkUrlAllowed(targetUrl, record.allowedOrigins);
         } catch {
           event.preventDefault();
         }
@@ -142,6 +151,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
     async navigate(viewId, owner, url) {
       const record = getRecord(viewId, owner);
       const targetUrl = typeof url === 'string' ? url : url.href;
+      checkUrlAllowed(targetUrl, record.allowedOrigins);
 
       try {
         record.documentGeneration++;
@@ -162,6 +172,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
           documentGeneration: record.documentGeneration,
         };
       } catch (err) {
+        if (err instanceof BrowserFault) throw err;
         throw new BrowserFault('BACKEND_UNAVAILABLE');
       }
     },

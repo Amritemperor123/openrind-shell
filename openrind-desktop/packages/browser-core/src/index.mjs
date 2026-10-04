@@ -221,9 +221,13 @@ export class BrowserCore {
     const needed = actionTools.has(name) ? 'elementActions' : capability[name];
     if (needed && !session.capabilities[needed]) throw new BrowserFault('CAPABILITY_UNAVAILABLE');
     if (args.secretId) throw new BrowserFault('CAPABILITY_UNAVAILABLE');
+    let preloadedArtifact = null;
     if (['browser_upload_file', 'browser_screenshot', 'browser_downloads'].includes(name)) {
       if (!this.artifacts) throw new BrowserFault('CAPABILITY_UNAVAILABLE');
       if (needed && !session.capabilities[needed]) throw new BrowserFault('CAPABILITY_UNAVAILABLE');
+      if (name === 'browser_upload_file') {
+        preloadedArtifact = await this.artifacts.get(auth.owner, args.artifactId);
+      }
     }
     const page = args.pageId && session.pages.find(p => p.id === args.pageId);
     const context = { owner: auth.owner, sessionId: session.id, sessionEpoch: session.epoch, pageId: args.pageId };
@@ -295,10 +299,7 @@ export class BrowserCore {
         }
         if (actionTools.has(name)) {
           const kind = name.slice(8);
-          let fileArtifact;
-          if (kind === 'upload_file') {
-            fileArtifact = await this.artifacts.get(auth.owner, args.artifactId);
-          }
+          const fileArtifact = kind === 'upload_file' ? (preloadedArtifact || await this.artifacts.get(auth.owner, args.artifactId)) : null;
           const action = Object.freeze({ kind, ...(target ? { target } : {}),
             ...(fileArtifact ? { artifact: fileArtifact } : {}),
             ...(kind === 'fill' ? { text: args.text } : {}), ...(kind === 'select' ? { values: args.values } : {}),

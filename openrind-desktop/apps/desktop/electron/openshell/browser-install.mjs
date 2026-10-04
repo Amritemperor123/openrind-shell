@@ -37,14 +37,15 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
   if (installed.exitCode !== 0) throw new Error('Browser endpoint installation failed; rebuild or repair the sandbox');
 
   if (serviceToken) {
-    await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
-      'sh', '-c', 'mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime && cat > /etc/openrind-browser/service-token && chmod 644 /etc/openrind-browser/service-token && printf "export OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n" "$(cat /etc/openrind-browser/service-token)" > /var/lib/openrind-shell/runtime/browser.env && chmod 666 /var/lib/openrind-shell/runtime/browser.env && chown 1000:1000 /var/lib/openrind-shell/runtime/browser.env'], {
+    const tokenRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
+      'sh', '-c', 'mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime && cat > /etc/openrind-browser/service-token && chmod 600 /etc/openrind-browser/service-token && printf "export OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n" "$(cat /etc/openrind-browser/service-token)" > /var/lib/openrind-shell/runtime/browser.env && chmod 600 /var/lib/openrind-shell/runtime/browser.env && chown 1000:1000 /var/lib/openrind-shell/runtime/browser.env /etc/openrind-browser/service-token'], {
       stdin: serviceToken.trim(),
       timeout: 15_000,
-    }).catch(() => {});
+    }).catch(err => ({ exitCode: -1, stderr: String(err) }));
+    if (tokenRes.exitCode !== 0) console.warn('[browser-install] Service token write failed:', tokenRes.stderr);
   }
 
-  await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
+  const mcpRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
     'sh', '-c', `
       mkdir -p /opt/openrind-browser /sandbox/claude-home
       printf '{"mcpServers":{"openrind-browser":{"type":"stdio","command":"/usr/local/bin/openrind-browser-client","args":[]}}}\\n' > /opt/openrind-browser/mcp.json
@@ -54,24 +55,28 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
       if [ -f /sandbox/claude-home/.claude.json ]; then
         node -e 'try { const fs=require("fs"); const p="/sandbox/claude-home/.claude.json"; const c=JSON.parse(fs.readFileSync(p,"utf8")); c.mcpServers=c.mcpServers||{}; c.mcpServers["openrind-browser"]={"type":"stdio","command":"/usr/local/bin/openrind-browser-client","args":[]}; fs.writeFileSync(p,JSON.stringify(c,null,2)); } catch {}'
       fi
-    `], { timeout: 15_000 }).catch(() => {});
+    `], { timeout: 15_000 }).catch(err => ({ exitCode: -1, stderr: String(err) }));
+  if (mcpRes.exitCode !== 0) console.warn('[browser-install] MCP config write failed:', mcpRes.stderr);
 
-  await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
-    'sh', '-c', 'cat > /usr/local/bin/browser && sed -i "s/\\r$//" /usr/local/bin/browser && chmod 0755 /usr/local/bin/browser && for cmd in start navigate snapshot click fill close status tabs open type; do ln -sf /usr/local/bin/browser "/usr/local/bin/browser_$cmd"; done'], {
+  const binRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
+    'sh', '-c', 'cat > /usr/local/bin/browser && sed -i "s/\\r$//" /usr/local/bin/browser && chmod 0755 /usr/local/bin/browser && for cmd in start navigate snapshot click fill close status tabs open type press screenshot; do ln -sf /usr/local/bin/browser "/usr/local/bin/browser_$cmd"; done'], {
     stdin: '#!/bin/sh\nbase="$(basename "$0")"\nexport OPENRIND_BROWSER_BIN="$base"\nexec /usr/bin/node /opt/openrind-browser/cli.cjs "$@"\n',
     timeout: 15_000,
-  }).catch(() => {});
+  }).catch(err => ({ exitCode: -1, stderr: String(err) }));
+  if (binRes.exitCode !== 0) console.warn('[browser-install] Browser binary installation failed:', binRes.stderr);
 
   // Run the MCP preflight / startup verification inside the sandbox container
   const verification = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', 'sandbox', ids[0],
     'sh', '-c', `
       if [ -x /usr/local/bin/openrind-browser-client ] && [ -f /etc/openrind-browser/descriptor.json ]; then
-        node /opt/openrind-browser/preflight.cjs 2>&1 || true
+        node /opt/openrind-browser/preflight.cjs
         echo "openrind-browser-mcp: verified"
       fi
-    `], { timeout: 15_000 }).catch(() => null);
+    `], { timeout: 15_000 }).catch(err => ({ exitCode: -1, stdout: '', stderr: String(err) }));
 
   if (verification?.stdout?.includes('openrind-browser-mcp: verified')) {
     console.log(`[browser-install] Sandbox ${sandboxName}: Browser MCP and CLI successfully verified.`);
+  } else {
+    console.warn(`[browser-install] Sandbox ${sandboxName}: Browser MCP verification warning:`, verification?.stderr || verification?.stdout);
   }
 }
