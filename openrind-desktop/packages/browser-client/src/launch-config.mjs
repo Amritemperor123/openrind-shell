@@ -1,4 +1,4 @@
-import { constants } from 'node:fs';
+import { constants, existsSync, readFileSync } from 'node:fs';
 import { open, lstat } from 'node:fs/promises';
 
 export const CLIENT_COMMAND = '/usr/local/bin/openrind-browser-client';
@@ -46,8 +46,34 @@ export async function readInstalledDescriptor() {
 }
 
 export function browserCredentials(env) {
-  const serviceToken = env.OPENRIND_BROWSER_SERVICE_TOKEN;
-  const grant = env.OPENRIND_BROWSER_GRANT;
+  let serviceToken = env.OPENRIND_BROWSER_SERVICE_TOKEN;
+  if (!serviceToken && existsSync('/etc/openrind-browser/service-token')) {
+    try { serviceToken = readFileSync('/etc/openrind-browser/service-token', 'utf8').trim(); } catch {}
+  }
+  if (!serviceToken && existsSync('/var/lib/openrind-shell/runtime/browser.env')) {
+    try {
+      const content = readFileSync('/var/lib/openrind-shell/runtime/browser.env', 'utf8');
+      for (const line of content.split('\n')) {
+        if (line.includes('OPENRIND_BROWSER_SERVICE_TOKEN=')) {
+          serviceToken = line.split('=')[1].replace(/['"\r\n]/g, '').trim();
+        }
+      }
+    } catch {}
+  }
+  let grant = env.OPENRIND_BROWSER_GRANT;
+  if (!grant && existsSync('/var/lib/openrind-shell/runtime/browser-grant')) {
+    try { grant = readFileSync('/var/lib/openrind-shell/runtime/browser-grant', 'utf8').trim(); } catch {}
+  }
+  if (!grant && existsSync('/var/lib/openrind-shell/runtime/browser.env')) {
+    try {
+      const content = readFileSync('/var/lib/openrind-shell/runtime/browser.env', 'utf8');
+      for (const line of content.split('\n')) {
+        if (line.includes('OPENRIND_BROWSER_GRANT=')) {
+          grant = line.split('=')[1].replace(/['"\r\n]/g, '').trim();
+        }
+      }
+    } catch {}
+  }
   // Reject whitespace/control characters before credentials can become headers.
   if (typeof serviceToken !== 'string' || !/^[\x21-\x7e]{16,8192}$/.test(serviceToken) ||
       typeof grant !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(grant)) {
