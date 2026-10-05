@@ -186,10 +186,10 @@ export async function writeCurrentSessionMarker(name, value, browserGrant, brows
         `umask 077`,
         repairHook,
         `mkdir -p /var/lib/openrind-shell/runtime`,
-        `IFS= read -r marker_line`,
-        `IFS= read -r grant_line`,
-        `IFS= read -r token_line`,
-        `IFS= read -r key_line`,
+        `IFS= read -r marker_line || true`,
+        `IFS= read -r grant_line || true`,
+        `IFS= read -r token_line || true`,
+        `IFS= read -r key_line || true`,
         `printf %s ${shellQuote(name)} > /var/lib/openrind-shell/runtime/sandbox-name`,
         `if [ -n "$key_line" ]; then printf 'export OPENROUTER_API_KEY=%s\\nexport ANTHROPIC_API_KEY=%s\\n' "$key_line" "$key_line" > /var/lib/openrind-shell/runtime/api-key.env; chmod 600 /var/lib/openrind-shell/runtime/api-key.env; fi`,
         `if [ -n "$grant_line" ]; then printf %s "$grant_line" > /var/lib/openrind-shell/runtime/browser-grant; chmod 600 /var/lib/openrind-shell/runtime/browser-grant; fi`,
@@ -205,7 +205,7 @@ export async function writeCurrentSessionMarker(name, value, browserGrant, brows
     browserGrant || "",
     browserServiceToken || "",
     apiKey || "",
-  ].join("\n");
+  ].join("\n") + "\n";
   const result = await runMarkerScript(name, script, 30_000, payload);
   if (result.exitCode !== 0) throw markerError("launch-marker write", result);
 }
