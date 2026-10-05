@@ -1,7 +1,15 @@
 import { randomBytes, createHash } from 'node:crypto';
-import { chromium } from 'playwright';
 import { BrowserFault, LIMITS } from '@openrind/browser-contract';
 import { PlaywrightSession } from '@openrind/browser-drivers';
+
+async function getChromium() {
+  try {
+    const mod = await import('playwright');
+    return mod.chromium || mod.default?.chromium;
+  } catch {
+    throw new BrowserFault('BACKEND_UNAVAILABLE');
+  }
+}
 
 const BROWSERBASE_API_DEFAULT = 'https://api.browserbase.com/v1';
 
@@ -10,7 +18,7 @@ export function createBrowserbaseProvider(options = {}) {
   const projectId = options.projectId || process.env.BROWSERBASE_PROJECT_ID;
   const baseUrl = options.baseUrl || BROWSERBASE_API_DEFAULT;
   const customFetch = options.fetch || globalThis.fetch;
-  const customConnect = options.connectOverCDP || (url => chromium.connectOverCDP(url, { timeout: 30_000 }));
+  const customConnect = options.connectOverCDP || (async url => { const c = await getChromium(); return c.connectOverCDP(url, { timeout: 30_000 }); });
   const profileMode = options.profile || 'provider-context';
 
   const activeSessions = new Map();

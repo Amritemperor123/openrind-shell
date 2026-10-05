@@ -36,6 +36,25 @@ export const HALOOP_TEMPORARY_OPENROUTER_TEST_ENV =
   "OPENRIND_DESKTOP_HALOOP_TEST_OPENROUTER";
 export const HALOOP_TEMPORARY_OPENROUTER_MODEL = "openrouter/free";
 
+export function isExternalHaloop(env = process.env) {
+  if (env.OPENRIND_DESKTOP_HALOOP_EXTERNAL === "0" || env.OPENRIND_DESKTOP_HALOOP_LOCAL === "1") {
+    return false;
+  }
+  if (
+    env.OPENRIND_DESKTOP_HALOOP_EXTERNAL === "1" ||
+    env.OPENRIND_DESKTOP_HALOOP_LOCAL === "0" ||
+    env.OPENRIND_DESKTOP_HALOOP_NO_CONTAINER === "1"
+  ) {
+    return true;
+  }
+  try {
+    const url = new URL(HALOOP_SANDBOX_ENDPOINT);
+    return !["127.0.0.1", "localhost", "host.openshell.internal"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 const HALOOP_TEMPORARY_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -786,6 +805,9 @@ async function requireImage(run, { image, contract, contractLabel, service }) {
     result = await inspectImage(run, image, contractLabel);
   }
   if (result.exitCode !== 0) {
+    if (run === wslRun && isExternalHaloop()) {
+      return { contract, version: HALOOP_IMAGE_VERSION, imageId: "external" };
+    }
     throw new Error(
       `The required Haloop ${service} image ${image} is not present in the dedicated OpenShell WSL Docker daemon. Build the source-checkout images or make the pinned production image available, then retry.`,
     );
@@ -1142,15 +1164,39 @@ async function requireCollectorFromGateway(run) {
   );
 }
 
-async function requireAuthenticatedEdge(run) {
+async function requireAuthenticatedEdge(run = wslRun, isExternal = (run === wslRun && isExternalHaloop())) {
   // Check the edge agents actually use, not an unrelated healthy local container.
   const endpoint = new URL(HALOOP_SANDBOX_ENDPOINT);
   if (endpoint.hostname === "host.openshell.internal") endpoint.hostname = "127.0.0.1";
   endpoint.pathname = "/v1/messages";
+
+  if (isExternal) {
+    try {
+      const res = await fetch(endpoint.href, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.status !== 400 && res.status !== 401 && res.status !== 403 && res.status !== 200) {
+        throw new Error(`unexpected status ${res.status}`);
+      }
+      return;
+    } catch (err) {
+      throw new Error(
+        `The configured Haloop edge at ${endpoint.origin} failed its reachability/authentication check: ${err.message}`,
+      );
+    }
+  }
+
   const probe = [
     `fetch(${JSON.stringify(endpoint.href)},`,
     "{method:'POST',headers:{'content-type':'application/json'},body:'{\"model\":\"claude-3-5-sonnet-20241022\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}'})",
-    ".then(r=>{if(r.status!==401 && r.status!==403 && r.status!==400){console.error('unexpected status '+r.status);process.exit(1)}})",
+    ".then(r=>{if(r.status!==400 && r.status!==401 && r.status!==403){console.error('unexpected status '+r.status);process.exit(1)}})",
     ".catch(e=>{console.error(e.message);process.exit(1)})",
   ].join("");
   const result = await run(
@@ -1184,7 +1230,7 @@ export function createHaloopRuntimeManager({
 
   async function persistReadyRoute(route) {
     const result = await run(["-d", DISTRO_NAME, "--", "sh", "-c",
-      `umask 077; if [ -d ${HALOOP_READY_ROUTE_FILE} ]; then rm -rf ${HALOOP_READY_ROUTE_FILE}; fi; cat > ${HALOOP_READY_ROUTE_FILE}.tmp && mv ${HALOOP_READY_ROUTE_FILE}.tmp ${HALOOP_READY_ROUTE_FILE}`],
+      `umask 077; mkdir -p ${HALOOP_STATE_DIR}; if [ -d ${HALOOP_READY_ROUTE_FILE} ]; then rm -rf ${HALOOP_READY_ROUTE_FILE}; fi; cat > ${HALOOP_READY_ROUTE_FILE}.tmp && mv ${HALOOP_READY_ROUTE_FILE}.tmp ${HALOOP_READY_ROUTE_FILE}`],
       { stdin: JSON.stringify(route), timeout: 10_000, user: "root" });
     if (result.exitCode !== 0) throw new Error("Could not persist the ready Haloop route.");
   }
@@ -1765,6 +1811,69 @@ export function createHaloopRuntimeManager({
         .update(analysisEnvironment)
         .digest("hex");
       const previousRoute = lastReadyRoute;
+      const isExternal = (run === wslRun && isExternalHaloop(env)) || images.gateway.imageId === "external";
+      if (isExternal) {
+        await requireAuthenticatedEdge(run, true);
+        const conversation = options.issueConversation === true
+          ? issueHaloopConversationContext(registration.current, {
+              agentSessionId: options.agentSessionId,
+              contextId: options.haloopContextId,
+            })
+          : null;
+        if (conversation) {
+          const readyAt = Date.now();
+          await writeTrustedSpans(conversation.capture, [
+            {
+              kind: "AGENT",
+              eventId: "route-root",
+              name: "openrind.agent.route",
+              parentSpanId: "",
+              startMs: readyAt,
+              endMs: readyAt,
+              attributes: {
+                "openrind.agent.id": options.agentId,
+                "openrind.lifecycle": "ready",
+              },
+            },
+          ]).catch(() => undefined);
+        }
+        managedThisProcess = true;
+        options.onProgress?.({
+          phase: "haloop",
+          message: `Connected to external Haloop edge at ${HALOOP_SANDBOX_ENDPOINT}.`,
+        });
+        const result = {
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          providerName: registration.current.providerName,
+          clientToken: registration.current.clientToken,
+          profileId: registration.current.id,
+          version: images.gateway.version,
+          upstreamMode: upstream.mode,
+          ...(conversation
+            ? {
+                capture: conversation.capture,
+                haloopContextId: conversation.contextId,
+                sessionAssertion: conversation.assertion,
+                sessionAssertionExpiresAt: conversation.expiresAtMs,
+              }
+            : {}),
+        };
+        lastReadyRoute = {
+          gatewayProfileHash: profileHash,
+          profileId: registration.current.id,
+          providerName: registration.current.providerName,
+          sandboxName: options.sandboxName,
+          workspaceId: options.workspaceId,
+          agentId: options.agentId,
+          upstreamMode: upstream.mode,
+          analysisConfigHash,
+        };
+        await persistReadyRoute(lastReadyRoute);
+        await registration.commit?.();
+        lastAnalysisProject = (options.sandboxName && String(options.sandboxName).trim()) || haloopProjectForWorkspace(options.workspaceId);
+        return result;
+      }
       const transactionId = randomBytes(8).toString("hex");
       const heldContainers = [];
       const stateFiles = [HALOOP_PROFILES_FILE, HALOOP_ANALYSIS_ENV_FILE, HALOOP_READY_ROUTE_FILE];
@@ -1985,6 +2094,33 @@ export function createHaloopRuntimeManager({
         };
       }
 
+      const isExternal = (run === wslRun && isExternalHaloop(env)) || images.gateway.imageId === "external";
+      if (isExternal) {
+        return {
+          required: true,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          upstreamMode: lastReadyRoute?.upstreamMode ??
+            (isTemporaryOpenRouterHaloopTestEnabled(env) ? "openrouter-test" : "anthropic"),
+          state: "ready",
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          version: images.gateway.version,
+          health: "healthy",
+          collectorHealth: "healthy",
+          activeRoute: lastReadyRoute
+            ? {
+                profileId: lastReadyRoute.profileId,
+                providerName: lastReadyRoute.providerName,
+                sandboxName: lastReadyRoute.sandboxName,
+                agentId: lastReadyRoute.agentId,
+              }
+            : null,
+          detail: `Connected to external Haloop edge at ${HALOOP_SANDBOX_ENDPOINT}.`,
+          lastConnectionError,
+          spanCapture: { ...captureStatus },
+          checkedAt,
+        };
+      }
+
       const network = await inspectNetwork(run);
       const gateway = await inspectContainer(run, HALOOP_CONTAINER_NAME);
       const collector = await inspectContainer(run, HALOOP_COLLECTOR_CONTAINER_NAME);
@@ -2164,6 +2300,22 @@ export function createHaloopRuntimeManager({
 
       await ensureDistro();
       const images = await requireHaloopImages(run);
+      const isExternal = (run === wslRun && isExternalHaloop(env)) || images.gateway.imageId === "external";
+      if (isExternal) {
+        await options.beforeRollback?.(publicRouteIdentity(route));
+        const result = await ensureOperation({
+          anthropicApiKey: upstreamKey,
+          sandboxName: route.sandboxName,
+          workspaceId: route.workspaceId,
+          agentId: route.agentId,
+          onProgress: options.onProgress,
+        });
+        return {
+          ...result,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          sessionsPreserved: true,
+        };
+      }
       const network = await inspectNetwork(run);
       const collector = await inspectContainer(run, HALOOP_COLLECTOR_CONTAINER_NAME);
       const gateway = await inspectContainer(run, HALOOP_CONTAINER_NAME);
@@ -2252,7 +2404,29 @@ export function createHaloopRuntimeManager({
       }
 
       await ensureDistro();
-      await requireHaloopImages(run);
+      const images = await requireHaloopImages(run);
+      const isExternal = (run === wslRun && isExternalHaloop(env)) || images.gateway.imageId === "external";
+      if (isExternal) {
+        const affectedSessions = Number(
+          await options.beforeRotate?.(publicRouteIdentity(route)),
+        ) || 0;
+        const registration = await rotateProfile({
+          sandboxName: route.sandboxName,
+          workspaceId: route.workspaceId,
+          agentId: route.agentId,
+        });
+        if (!registration.current || registration.current.id !== route.profileId) {
+          throw new Error("The scoped Haloop client token could not be rotated safely.");
+        }
+        const result = await ensureOperation({
+          anthropicApiKey: upstreamKey,
+          sandboxName: route.sandboxName,
+          workspaceId: route.workspaceId,
+          agentId: route.agentId,
+          onProgress: options.onProgress,
+        });
+        return { ...result, affectedSessions, relaunchRequired: true };
+      }
       const gateway = await inspectContainer(run, HALOOP_CONTAINER_NAME);
       if (gateway && !gateway.managed) {
         throw new Error(

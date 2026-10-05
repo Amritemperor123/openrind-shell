@@ -11,51 +11,6 @@ patchedDependencies:
 
 importers:
 
-  packages/browser-contract:
-    dependencies:
-      zod:
-        specifier: 4.3.6
-        version: 4.3.6
-
-  packages/browser-core:
-    dependencies:
-      '@openrind/browser-contract':
-        specifier: workspace:*
-        version: link:../browser-contract
-
-  packages/browser-client:
-    dependencies:
-      '@openrind/browser-contract':
-        specifier: workspace:*
-        version: link:../browser-contract
-
-  packages/browser-drivers:
-    dependencies:
-      '@openrind/browser-contract':
-        specifier: workspace:*
-        version: link:../browser-contract
-
-  packages/browser-providers:
-    dependencies:
-      '@openrind/browser-contract':
-        specifier: workspace:*
-        version: link:../browser-contract
-      '@openrind/browser-drivers':
-        specifier: workspace:*
-        version: link:../browser-drivers
-
-  packages/browser-service:
-    dependencies:
-      '@openrind/browser-contract':
-        specifier: workspace:*
-        version: link:../browser-contract
-      '@openrind/browser-core':
-        specifier: workspace:*
-        version: link:../browser-core
-      '@openrind/browser-providers':
-        specifier: workspace:*
-        version: link:../browser-providers
-
   .:
     devDependencies:
       cross-env:
@@ -212,10 +167,19 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../../packages/browser-contract
       electron-updater:
         specifier: ^6.3.9
         version: 6.8.3
     devDependencies:
+      '@openrind/browser-core':
+        specifier: workspace:*
+        version: link:../../packages/browser-core
+      '@openrind/browser-providers':
+        specifier: workspace:*
+        version: link:../../packages/browser-providers
       '@tauri-apps/cli':
         specifier: ^2.0.0
         version: 2.9.6
@@ -511,6 +475,57 @@ importers:
       vite:
         specifier: ^7.1.12
         version: 7.3.1(@types/node@25.4.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/browser-client:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-contract:
+    dependencies:
+      zod:
+        specifier: 4.3.6
+        version: 4.3.6
+
+  packages/browser-core:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-drivers:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+
+  packages/browser-providers:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+      '@openrind/browser-core':
+        specifier: workspace:*
+        version: link:../browser-core
+      '@openrind/browser-drivers':
+        specifier: workspace:*
+        version: link:../browser-drivers
+      playwright:
+        specifier: ^1.50.0
+        version: 1.58.2
+
+  packages/browser-service:
+    dependencies:
+      '@openrind/browser-contract':
+        specifier: workspace:*
+        version: link:../browser-contract
+      '@openrind/browser-core':
+        specifier: workspace:*
+        version: link:../browser-core
+      '@openrind/browser-providers':
+        specifier: workspace:*
+        version: link:../browser-providers
 
   packages/openrind-desktop-server-sdk:
     dependencies:
