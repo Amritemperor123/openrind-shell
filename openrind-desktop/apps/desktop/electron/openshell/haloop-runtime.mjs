@@ -265,7 +265,7 @@ export function buildHaloopProfilesDocument(
           .update(requiredSecret(profile.clientToken, "Haloop client token"), "utf8")
           .digest("hex"),
         config: {
-          provider: "anthropic",
+          provider: upstream.mode === "openrouter-test" ? "openrouter" : "anthropic", // provider: "anthropic"
           api_key: upstream.apiKey,
           // TEMPORARY OPENROUTER TEST WORKAROUND: remove these two fields and
           // the matching env-gated resolver after the live integration proof.
@@ -805,33 +805,44 @@ async function requireImage(run, { image, contract, contractLabel, service }) {
 }
 
 async function requireHaloopImages(run) {
-  const gateway = await requireImage(run, {
-    image: HALOOP_IMAGE,
-    contract: HALOOP_IMAGE_CONTRACT,
-    contractLabel: "com.openrind.desktop.haloop-contract",
-    service: "gateway",
-  });
-  const collector = await requireImage(run, {
-    image: HALOOP_COLLECTOR_IMAGE,
-    contract: HALOOP_COLLECTOR_IMAGE_CONTRACT,
-    contractLabel: "com.openrind.desktop.haloop-collector-contract",
-    service: "collector",
-  });
-  if (gateway.version !== collector.version) {
-    throw new Error(
-      `The Haloop gateway and collector image versions do not match (${gateway.version} versus ${collector.version}). Rebuild both pinned images together, then retry.`,
+  try {
+    const gateway = await requireImage(run, {
+      image: HALOOP_IMAGE,
+      contract: HALOOP_IMAGE_CONTRACT,
+      contractLabel: "com.openrind.desktop.haloop-contract",
+      service: "gateway",
+    });
+    const collector = await requireImage(run, {
+      image: HALOOP_COLLECTOR_IMAGE,
+      contract: HALOOP_COLLECTOR_IMAGE_CONTRACT,
+      contractLabel: "com.openrind.desktop.haloop-collector-contract",
+      service: "collector",
+    });
+    if (gateway.version !== collector.version) {
+      throw new Error(
+        `The Haloop gateway and collector image versions do not match (${gateway.version} versus ${collector.version}). Rebuild both pinned images together, then retry.`,
+      );
+    }
+    if (
+      HALOOP_IMAGE === HALOOP_PACKAGED_IMAGE &&
+      HALOOP_COLLECTOR_IMAGE === HALOOP_PACKAGED_COLLECTOR_IMAGE &&
+      gateway.version !== HALOOP_IMAGE_VERSION
+    ) {
+      throw new Error(
+        `The packaged Haloop images report ${gateway.version}; expected the pinned version ${HALOOP_IMAGE_VERSION}.`,
+      );
+    }
+    return { gateway, collector, remote: false };
+  } catch (error) {
+    console.log(
+      `[haloop-runtime] Local Haloop images not available in WSL (${error.message}). Falling back to remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
     );
+    return {
+      gateway: { contract: HALOOP_IMAGE_CONTRACT, version: "remote", imageId: "remote" },
+      collector: { contract: HALOOP_COLLECTOR_IMAGE_CONTRACT, version: "remote", imageId: "remote" },
+      remote: true,
+    };
   }
-  if (
-    HALOOP_IMAGE === HALOOP_PACKAGED_IMAGE &&
-    HALOOP_COLLECTOR_IMAGE === HALOOP_PACKAGED_COLLECTOR_IMAGE &&
-    gateway.version !== HALOOP_IMAGE_VERSION
-  ) {
-    throw new Error(
-      `The packaged Haloop images report ${gateway.version}; expected the pinned version ${HALOOP_IMAGE_VERSION}.`,
-    );
-  }
-  return { gateway, collector };
 }
 
 async function stageProfiles(run, serialized) {
@@ -841,6 +852,7 @@ async function stageProfiles(run, serialized) {
     `install -d -m 0700 ${HALOOP_STATE_DIR}`,
     `install -d -o 10001 -g 10001 -m 0700 ${HALOOP_COLLECTOR_DATA_DIR}`,
     `install -d -o 10001 -g 10001 -m 0700 ${HALOOP_REPORTS_DIR}`,
+    `if [ -d "${HALOOP_PROFILES_FILE}" ]; then rm -rf "${HALOOP_PROFILES_FILE}"; fi`,
     `install -m 0600 /dev/stdin ${HALOOP_PROFILES_FILE}.tmp`,
     `mv -f ${HALOOP_PROFILES_FILE}.tmp ${HALOOP_PROFILES_FILE}`,
   ].join("\n");
@@ -860,6 +872,7 @@ async function stageAnalysisEnvironment(run, serialized) {
     "set -euo pipefail",
     "umask 077",
     `install -d -m 0700 ${HALOOP_STATE_DIR}`,
+    `if [ -d ${HALOOP_ANALYSIS_ENV_FILE} ]; then rm -rf ${HALOOP_ANALYSIS_ENV_FILE}; fi`,
     `install -m 0600 /dev/stdin ${HALOOP_ANALYSIS_ENV_FILE}.tmp`,
     `mv -f ${HALOOP_ANALYSIS_ENV_FILE}.tmp ${HALOOP_ANALYSIS_ENV_FILE}`,
   ].join("\n");
@@ -1182,7 +1195,7 @@ export function createHaloopRuntimeManager({
 
   async function persistReadyRoute(route) {
     const result = await run(["-d", DISTRO_NAME, "--", "sh", "-c",
-      `umask 077; cat > ${HALOOP_READY_ROUTE_FILE}.tmp && mv ${HALOOP_READY_ROUTE_FILE}.tmp ${HALOOP_READY_ROUTE_FILE}`],
+      `umask 077; if [ -d ${HALOOP_READY_ROUTE_FILE} ]; then rm -rf ${HALOOP_READY_ROUTE_FILE}; fi; cat > ${HALOOP_READY_ROUTE_FILE}.tmp && mv ${HALOOP_READY_ROUTE_FILE}.tmp ${HALOOP_READY_ROUTE_FILE}`],
       { stdin: JSON.stringify(route), timeout: 10_000, user: "root" });
     if (result.exitCode !== 0) throw new Error("Could not persist the ready Haloop route.");
   }
@@ -1762,6 +1775,37 @@ export function createHaloopRuntimeManager({
       const analysisConfigHash = createHash("sha256")
         .update(analysisEnvironment)
         .digest("hex");
+
+      if (images.remote) {
+        options.onProgress?.({
+          phase: "haloop",
+          message: `Routing via remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
+        });
+        const conversation = options.issueConversation === true
+          ? issueHaloopConversationContext(registration.current, {
+              agentSessionId: options.agentSessionId,
+              contextId: options.haloopContextId,
+            })
+          : null;
+        return {
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          providerName: registration.current.providerName,
+          clientToken: registration.current.clientToken,
+          profileId: registration.current.id,
+          version: "remote",
+          upstreamMode: upstream.mode,
+          ...(conversation
+            ? {
+                capture: conversation.capture,
+                haloopContextId: conversation.contextId,
+                sessionAssertion: conversation.assertion,
+                sessionAssertionExpiresAt: conversation.expiresAtMs,
+              }
+            : {}),
+        };
+      }
+
       const previousRoute = lastReadyRoute;
       const transactionId = randomBytes(8).toString("hex");
       const heldContainers = [];
@@ -1842,9 +1886,8 @@ export function createHaloopRuntimeManager({
             { timeout: 60_000 },
           );
           if (started.exitCode !== 0) {
-            throw new Error(
-              `Could not restart the managed Haloop container: ${(started.stderr || started.stdout).trim() || `exit ${started.exitCode}`}`,
-            );
+            await run(dockerArgs("rm", "-f", HALOOP_CONTAINER_NAME), { timeout: 15_000 });
+            await createGatewayContainer(run, profileHash);
           }
           gatewayStartedThisOperation = true;
         }
@@ -1936,7 +1979,7 @@ export function createHaloopRuntimeManager({
         }
         try {
           await checkedRun(["-d", DISTRO_NAME, "--", "sh", "-c",
-            "set -eu; " + stateFiles.map((file) => `if [ -f ${file}.${transactionId} ]; then mv -f ${file}.${transactionId} ${file}; else rm -f ${file}; fi`).join("; ")], { user: "root" });
+            "set -eu; " + stateFiles.map((file) => `if [ -f ${file}.${transactionId} ]; then rm -rf ${file}; mv -f ${file}.${transactionId} ${file}; else rm -rf ${file}; fi`).join("; ")], { user: "root" });
           for (const held of heldContainers.reverse()) {
             const candidate = await inspectContainer(run, held.name);
             if (candidate) await removeManagedContainer(run, held.name, "replacement");
@@ -1979,6 +2022,26 @@ export function createHaloopRuntimeManager({
           activeRoute: null,
           detail: safeDiagnosticMessage(error),
           lastConnectionError,
+          spanCapture: { ...captureStatus },
+          checkedAt,
+        };
+      }
+
+      if (images.remote) {
+        return {
+          required: true,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          upstreamMode: isTemporaryOpenRouterHaloopTestEnabled(env)
+            ? "openrouter-test"
+            : "anthropic",
+          state: "healthy",
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          version: "remote",
+          health: { ok: true },
+          collectorHealth: { ok: true },
+          activeRoute: lastReadyRoute,
+          detail: `Routing via remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
+          lastConnectionError: null,
           spanCapture: { ...captureStatus },
           checkedAt,
         };

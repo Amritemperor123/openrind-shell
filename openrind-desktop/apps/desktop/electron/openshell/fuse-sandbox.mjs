@@ -30,7 +30,7 @@ const CLAUDE_SESSION_NAMESPACE = "6f9b1e2a-0c3d-4b7a-9e21-8a4c1d5f7b30";
 const MAX_CAPTURE_BYTES = 2 * 1024 * 1024;
 const sandboxProvisioning = createSandboxProvisioningCoordinator();
 
-async function requiredHaloopUpstreamApiKey() {
+export async function requiredHaloopUpstreamApiKey() {
   const anthropicApiKey = await getCredential("anthropicApiKey");
   return resolveHaloopUpstreamApiKey(anthropicApiKey);
 }
@@ -121,11 +121,18 @@ function normalizeProviderRows(stdout) {
 async function ensureHaloopProvider(providerName, clientToken, onProgress) {
   // Claude, OpenClaw, and OpenHands look for ANTHROPIC_API_KEY, OPENAI_API_KEY,
   // or LLM_API_KEY. The value supplied here is resolved at request time by OpenShell.
+  const openrouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
+  const adminToken = (process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || "").trim();
+  const haloopProvider = (process.env.W8_HALOOP_PROVIDER || process.env.OPENRIND_GATEWAY_PROVIDER || (openrouterKey ? "openrouter" : "anthropic")).trim();
   const env = buildFuseWslEnv({
     ANTHROPIC_API_KEY: clientToken,
     OPENAI_API_KEY: clientToken,
     LLM_API_KEY: clientToken,
     HALOOP_CLIENT_TOKEN: clientToken,
+    ...(openrouterKey ? { OPENROUTER_API_KEY: openrouterKey } : {}),
+    ...(adminToken ? { ADMIN_TOKEN: adminToken } : {}),
+    W8_HALOOP_PROVIDER: haloopProvider,
+    OPENRIND_GATEWAY_PROVIDER: haloopProvider,
   });
   const listed = await runFuseOpenShell(
     ["provider", "list", "-o", "json"],
@@ -156,8 +163,17 @@ async function ensureHaloopProvider(providerName, clientToken, onProgress) {
     replaced = true;
   }
 
+  const credentialArgs = ["--credential", "ANTHROPIC_API_KEY"];
+  if (openrouterKey) {
+    credentialArgs.push("--credential", "OPENROUTER_API_KEY");
+  }
+  if (adminToken) {
+    credentialArgs.push("--credential", "ADMIN_TOKEN");
+  }
+  credentialArgs.push("--credential", "W8_HALOOP_PROVIDER");
+
   const command = current && !replaced
-    ? ["provider", "update", providerName, "--credential", "ANTHROPIC_API_KEY"]
+    ? ["provider", "update", providerName, ...credentialArgs]
     : [
         "provider",
         "create",
@@ -165,8 +181,7 @@ async function ensureHaloopProvider(providerName, clientToken, onProgress) {
         providerName,
         "--type",
         "haloop-anthropic",
-        "--credential",
-        "ANTHROPIC_API_KEY",
+        ...credentialArgs,
       ];
   onProgress?.({
     phase: "provider",
@@ -509,7 +524,7 @@ export async function resolveOpenrindShellSandboxWorkspaceId(options = {}) {
       "--format",
       `{{ index .Labels "com.openrind.desktop.workspace" }}`,
     ],
-    { timeout: 15_000 },
+    { timeout: 45_000 },
   ).catch(() => null);
   const recorded = inspected?.exitCode === 0 ? validatedWorkspaceId(inspected.stdout) : null;
   if (recorded) return recorded;
@@ -533,7 +548,7 @@ async function ensureAgentHomeVolume(sandboxName, workspaceId, agent) {
       `com.openrind.desktop.workspace=${workspaceId}`,
       volumeName,
     ],
-    { timeout: 15_000 },
+    { timeout: 45_000 },
   );
   if (result.exitCode !== 0) {
     throw new Error(
@@ -662,10 +677,22 @@ async function provisionOpenrindShellSandbox(options) {
   onProgress?.({ phase: "control-plane", message: "Checking the paired OpenShell FUSE gateway…" });
   await ensureFuseRuntime({ onProgress });
 
-  const databaseUrl = await getCredential("databaseUrl");
+  let databaseUrl = await getCredential("databaseUrl");
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is required. Configure the PostgreSQL session-mode URL in Settings → Environment.");
   }
+  databaseUrl = databaseUrl.trim();
+  if (databaseUrl.startsWith("DATABASE_URL=")) {
+    databaseUrl = databaseUrl.slice("DATABASE_URL=".length).trim();
+  }
+  if ((databaseUrl.startsWith("'") && databaseUrl.endsWith("'")) ||
+      (databaseUrl.startsWith('"') && databaseUrl.endsWith('"'))) {
+    databaseUrl = databaseUrl.slice(1, -1).trim();
+  }
+  let anthropicApiKey = "";
+  try {
+    anthropicApiKey = await requiredHaloopUpstreamApiKey();
+  } catch {}
   const haloop = await prepareRequiredHaloop({ name, workspaceId, agent, onProgress });
   const replaced = haloop.replaced;
   await requireFuseImage(onProgress);
@@ -730,6 +757,10 @@ async function provisionOpenrindShellSandbox(options) {
     "--env",
     `OPENRIND_SHELL_WORKSPACE_ID=${workspaceId}`,
     "--env",
+    `OPENRIND_SHELL_SANDBOX_NAME=${name}`,
+    "--env",
+    `OPENRIND_SANDBOX_NAME=${name}`,
+    "--env",
     `OPENRIND_SHELL_AGENT=${agent.id}`,
     "--env",
     `OPENRIND_SHELL_OPENHANDS_MODE=${agent.mode || "cli"}`,
@@ -748,6 +779,13 @@ async function provisionOpenrindShellSandbox(options) {
       throw new Error(`Invalid Haloop gateway URL: ${haloop.endpoint}`);
     }
     sandboxArgs.push("--env", `HALOOP_GATEWAY_URL=${haloop.endpoint}`);
+    const activeProvider = (process.env.W8_HALOOP_PROVIDER || process.env.OPENRIND_GATEWAY_PROVIDER || "openrouter").trim();
+    sandboxArgs.push("--env", `W8_HALOOP_PROVIDER=${activeProvider}`);
+    const activeOpenrouterModel = (process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || "").trim();
+    if (activeOpenrouterModel) {
+      sandboxArgs.push("--env", `OPENROUTER_MODEL=${activeOpenrouterModel}`);
+      sandboxArgs.push("--env", `LLM_MODEL=${activeOpenrouterModel}`);
+    }
   }
   sandboxArgs.push(
     "--no-tty",

@@ -11,10 +11,12 @@ COPY openrind-desktop/packaging/browser-client/preflight-entry.mjs openrind-desk
 COPY openrind-desktop/packaging/browser-client/provision-entry.mjs ./
 COPY openrind-desktop/packaging/browser-client/edge-entry.mjs ./
 COPY openrind-desktop/packaging/browser-client/worker-entry.mjs ./
+COPY openrind-desktop/packaging/browser-client/cli-entry.mjs ./
 COPY openrind-desktop/packaging/browser-client/bridge/ ./bridge/
 COPY openrind-desktop/packages/browser-client/src/ /source/openrind-desktop/packages/browser-client/src/
 COPY openrind-desktop/packages/browser-contract/src/ /source/openrind-desktop/packages/browser-contract/src/
 COPY openrind-desktop/packages/browser-core/src/ /source/openrind-desktop/packages/browser-core/src/
+COPY openrind-desktop/packages/browser-drivers/src/ /source/openrind-desktop/packages/browser-drivers/src/
 COPY openrind-desktop/packages/browser-providers/src/ /source/openrind-desktop/packages/browser-providers/src/
 COPY openrind-desktop/packages/browser-service/src/ /source/openrind-desktop/packages/browser-service/src/
 RUN npm run build
@@ -79,13 +81,29 @@ COPY --from=fused-builder /source/openrind-browser-client /usr/local/bin/openrin
 COPY --from=browser-client-builder /source/openrind-desktop/packaging/browser-client/dist/ /opt/openrind-browser/
 # The endpoint descriptor is installed by trusted provisioning, not baked with
 # a default endpoint or credentials. Unprovisioned client startup fails closed.
+COPY sandboxes/openeral/browser-cli.sh /usr/local/bin/browser
 RUN mkdir -p /etc/openrind-browser \
+    && printf '{"protocol":1,"endpoint":"http://host.openshell.internal:18789/mcp","requireProxy":true}\n' > /etc/openrind-browser/descriptor.json \
     && chown -R root:root /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client \
-    && chmod 0755 /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client \
-    && chmod 0644 /opt/openrind-browser/*.cjs /opt/openrind-browser/*.json
+    && chmod 0755 /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client /usr/local/bin/browser \
+    && chmod 0644 /etc/openrind-browser/descriptor.json /opt/openrind-browser/*.cjs /opt/openrind-browser/*.json \
+    && sed -i 's/\r$//' /usr/local/bin/browser \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_start \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_navigate \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_snapshot \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_click \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_fill \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_close \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_status \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_tabs \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_open \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_type \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_press \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_screenshot
 COPY sandboxes/openeral/openhands-agent.py /opt/openrind-openhands/openhands-agent.py
 COPY sandboxes/openeral/openrind-openhands-fuse.sh /usr/local/bin/openrind-openhands
 COPY sandboxes/openeral/openeral-claude-fuse.sh /usr/local/bin/claude
+COPY sandboxes/openeral/haloop-agent-proxy.mjs /opt/openrind-shell/haloop-agent-proxy.mjs
 COPY sandboxes/openeral/pg-client-fuse.mjs /usr/local/bin/pg
 COPY sandboxes/openeral/setup-fuse.sh /opt/openrind-shell/setup.sh
 COPY sandboxes/openeral/openrind-pty-bridge.py /opt/openrind-shell/openrind-pty-bridge.py
@@ -97,6 +115,7 @@ COPY sandboxes/openeral/supabase-root-2021-ca.pem /opt/openrind-shell/certs/supa
 RUN chmod 755 /usr/local/bin/openrind-shell-fused /usr/local/bin/claude /usr/local/bin/pg /usr/local/bin/openrind-desktop-claude-launch \
         /usr/local/bin/openrind-openhands /usr/local/bin/openrind-openhands-agent \
         /usr/local/bin/openrind-openclaw /usr/local/bin/openrind-openclaw-agent \
+        /opt/openrind-shell/haloop-agent-proxy.mjs \
         /opt/openrind-shell/setup.sh /opt/openrind-shell/openrind-pty-bridge.py \
         /opt/openrind-shell/configure-haloop.mjs \
         /opt/openrind-shell/configure-openclaw-fuse.mjs \

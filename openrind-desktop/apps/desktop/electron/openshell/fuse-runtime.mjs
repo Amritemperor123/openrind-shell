@@ -37,18 +37,12 @@ export function shellQuote(value) {
  * Electron on Windows, so callers must use buildFuseWslEnv when spawning it.
  */
 export function resolveFuseRuntimeConfig(env = process.env) {
-  const bin = env.OPENSHELL_BIN?.trim();
-  const gatewayEndpoint = env.OPENSHELL_GATEWAY_ENDPOINT?.trim();
-  if (!bin) {
-    throw new Error(
-      "OPENSHELL_BIN is required for the FUSE runtime. Set it to the vendored patched OpenShell CLI (for example, /path/to/vendor/openshell/target/debug/openshell).",
-    );
-  }
-  if (!gatewayEndpoint) {
-    throw new Error(
-      "OPENSHELL_GATEWAY_ENDPOINT is required for the FUSE runtime. Set it to the patched Docker gateway endpoint (for example, http://127.0.0.1:18770).",
-    );
-  }
+  const bin =
+    env.OPENSHELL_BIN?.trim() ||
+    "/opt/openrind-desktop/fuse-runtime/openshell";
+  const gatewayEndpoint =
+    env.OPENSHELL_GATEWAY_ENDPOINT?.trim() ||
+    "http://127.0.0.1:18770";
   return { bin, gatewayEndpoint };
 }
 

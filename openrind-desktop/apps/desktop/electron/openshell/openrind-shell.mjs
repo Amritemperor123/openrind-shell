@@ -27,6 +27,7 @@ export {
   revokeOpenrindShellHaloopIntegration,
   revokeOpenrindShellHaloopForSandbox,
   rotateOpenrindShellHaloop,
+  requiredHaloopUpstreamApiKey,
   uploadWorkspaceFile,
 } from "./fuse-sandbox.mjs";
 export {
@@ -150,7 +151,7 @@ function markerError(action, result) {
 }
 
 /** Write the one-shot marker immediately before a new desktop connect. */
-export async function writeCurrentSessionMarker(name, value, browserGrant) {
+export async function writeCurrentSessionMarker(name, value, browserGrant, browserServiceToken, apiKey) {
   const marker = String(value ?? "").trim();
   if (
     marker &&
@@ -160,7 +161,7 @@ export async function writeCurrentSessionMarker(name, value, browserGrant) {
   ) {
     throw new Error("Invalid desktop Claude session marker.");
   }
-  if (browserGrant !== undefined && (!marker.startsWith('openrind-shell-claude:') ||
+  if (browserGrant !== undefined && (!/^(?:openrind-shell-claude|openrind-shell-openclaw|openrind-shell-openhands|openrind-shell-openhands-script):/.test(marker) ||
       typeof browserGrant !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(browserGrant))) {
     throw new Error('Invalid browser launch grant.');
   }
@@ -179,8 +180,14 @@ export async function writeCurrentSessionMarker(name, value, browserGrant) {
     `  printf '\\n%s\\n' ${shellQuote(interactiveHook)} >> /sandbox/.bashrc`,
     `fi`,
   ].join("\n");
+  const writeBrowserGrant = browserGrant
+    ? `printf %s ${shellQuote(browserGrant)} > /var/lib/openrind-shell/runtime/browser-grant; chmod 600 /var/lib/openrind-shell/runtime/browser-grant;`
+    : "";
+  const writeApiKey = apiKey
+    ? `printf 'export OPENROUTER_API_KEY=%s\\nexport ANTHROPIC_API_KEY=%s\\n' ${shellQuote(apiKey)} ${shellQuote(apiKey)} > /var/lib/openrind-shell/runtime/api-key.env; chmod 600 /var/lib/openrind-shell/runtime/api-key.env;`
+    : "";
   const script = marker
-    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
+    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; ${writeApiKey} ${writeBrowserGrant} printf %s ${shellQuote(name)} > /var/lib/openrind-shell/runtime/sandbox-name; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
     : `rm -f ${SESSION_MARKER_PATH}`;
   // Credentials travel through stdin rather than appearing in process arguments.
   const payload = browserGrant === undefined ? marker : `${marker}:${browserGrant}`;

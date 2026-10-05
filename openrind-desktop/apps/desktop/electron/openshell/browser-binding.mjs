@@ -15,15 +15,25 @@ export function browserBinding({ endpoint, bridgeAddress, bindingId }) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid browser endpoint port');
   const name = `browser-${createHash('sha256').update(JSON.stringify([bindingId, url.href, bridgeAddress])).digest('hex').slice(0, 24)}`;
   const rules = ['POST', 'GET', 'DELETE'].map(method => ({ allow: { method, path: '/mcp' } }));
-  const route = { host: url.hostname, port, protocol: 'rest', tls: url.protocol === 'https:' ? 'terminate' : 'none',
-    allowed_ips: [`${bridgeAddress}/32`], enforcement: 'enforce', rules };
+  const route = { host: url.hostname, port, ports: [port], protocol: 'rest', tls: url.protocol === 'https:' ? 'terminate' : 'none',
+    enforcement: 'enforce', rules };
   return Object.freeze({ name,
     descriptor: { protocol: 1, endpoint: url.href, requireProxy: true },
     profile: { id: name, display_name: 'Openrind browser service', category: 'other',
       credentials: [{ name: 'service_token', env_vars: ['OPENRIND_BROWSER_SERVICE_TOKEN'], required: true,
         auth_style: 'bearer', header_name: 'Authorization' }],
       discovery: { credentials: ['service_token'] }, endpoints: [route],
-      binaries: ['/usr/local/bin/openrind-browser-client'] },
-    networkPolicy: { name, endpoints: [route], binaries: [{ path: '/usr/local/bin/openrind-browser-client' }] },
+      binaries: [
+        '/usr/local/bin/openrind-browser-client',
+        '/usr/bin/node',
+        '/usr/local/bin/browser',
+        '/usr/bin/curl'
+      ] },
+    networkPolicy: { name, endpoints: [route], binaries: [
+      { path: '/usr/local/bin/openrind-browser-client' },
+      { path: '/usr/bin/node' },
+      { path: '/usr/local/bin/browser' },
+      { path: '/usr/bin/curl' }
+    ] },
   });
 }

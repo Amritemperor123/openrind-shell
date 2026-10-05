@@ -30,6 +30,8 @@ import {
 import { registerMigrationIpc } from "./migration.mjs";
 import { createRuntimeManager } from "./runtime.mjs";
 import { registerUpdaterIpc } from "./updater.mjs";
+import { createOwnedContentsBroker } from "./browser/broker.mjs";
+import { registerBrowserIpc } from "./browser/browser-ipc.mjs";
 import {
   exportWorkspaceConfig,
   importWorkspaceConfig,
@@ -681,13 +683,15 @@ async function writeOpenrindShellSessionMarker(
   agentSessionId,
   haloopSessionAssertion,
   browserGrant,
+  browserServiceToken,
+  apiKey,
 ) {
   const value = openrindShell.resolveAgentSessionValue(
     profile,
     agentSessionId,
     haloopSessionAssertion,
   );
-  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant);
+  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken, apiKey);
 }
 
 // Agent sessions are CONCURRENT: a sandbox hosts one live PTY per Openrind Desktop
@@ -820,23 +824,33 @@ function openOpenrindShellPtySession(opts) {
       let browserLease;
       if (prepareBrowserLease) {
         browserLease = await prepareBrowserLease();
-      } else if (profile === 'openrind-shell-claude') {
-        try {
-          browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId });
-        } catch (error) {
-          console.warn('Browser runtime setup failed; proceeding without browser lease:', error);
-          browserLease = undefined;
+      } else if (profile === 'openrind-shell-claude' || profile === 'openrind-shell-openhands' || profile === 'openrind-shell-openhands-script' || profile === 'openrind-shell-openclaw') {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
+            break;
+          } catch (error) {
+            console.warn(`Browser runtime setup attempt ${attempt} failed:`, error);
+            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+            else browserLease = undefined;
+          }
         }
       }
+
       let ptyExited = false;
       let opened;
       try {
+        let upstreamKey = "";
+      try { upstreamKey = await openrindShell.requiredHaloopUpstreamApiKey(); } catch {}
+      upstreamKey = (upstreamKey || process.env.ANTHROPIC_API_KEY || "").trim();
       await writeOpenrindShellSessionMarker(
         sandboxName,
         profile,
         agentSessionId,
         haloopSessionAssertion,
         browserLease?.token,
+        browserLease?.serviceToken,
+        upstreamKey,
       );
       // Even a desktop launch without a session id writes the `auto` marker, so
       // every fresh connect must wait for this marker to be consumed.
@@ -1653,11 +1667,28 @@ function engineDoctor(options = {}) {
   return runtimeManager.engineDoctor(options);
 }
 
+function isTrustedSender(event) {
+  if (!mainWindow || !event?.sender) return false;
+  // Sender must strictly be the main window's webContents, not an embedded WebContentsView
+  if (event.sender !== mainWindow.webContents) return false;
+  // If senderFrame exists, verify it is the top-level main frame
+  if (event.senderFrame && event.senderFrame !== mainWindow.webContents.mainFrame) return false;
+  return true;
+}
+
+function assertTrustedSender(event, action = 'IPC') {
+  if (!isTrustedSender(event)) {
+    throw new Error(`Unauthorized ${action} attempt from untrusted WebContents`);
+  }
+}
+
 function activeWindowFromEvent(event) {
-  return BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+  if (!isTrustedSender(event)) return undefined;
+  return mainWindow ?? undefined;
 }
 
 async function handleDesktopInvoke(event, command, ...args) {
+  assertTrustedSender(event, `command '${command}'`);
   switch (command) {
     case "workspaceBootstrap":
       return readWorkspaceState();
@@ -3639,7 +3670,8 @@ async function createMainWindow() {
 
 ipcMain.handle("openrind-desktop:desktop", handleDesktopInvoke);
 
-ipcMain.handle("openrind-desktop:workspace-config:read", async (_event, input) => {
+ipcMain.handle("openrind-desktop:workspace-config:read", async (event, input) => {
+  assertTrustedSender(event, "workspace-config:read");
   const workspacePath = String(input?.workspacePath ?? "").trim();
   const state = await readWorkspaceState();
   const workspaceRoot = await requireRegisteredLocalWorkspaceRoot({
@@ -3654,7 +3686,8 @@ ipcMain.handle("openrind-desktop:workspace-config:read", async (_event, input) =
   return JSON.parse(raw);
 });
 
-ipcMain.handle("openrind-desktop:workspace-config:write", async (_event, input) => {
+ipcMain.handle("openrind-desktop:workspace-config:write", async (event, input) => {
+  assertTrustedSender(event, "workspace-config:write");
   const workspacePath = String(input?.workspacePath ?? "").trim();
   const config = input?.config ?? defaultWorkspaceOpenrindDesktopConfig("");
   const state = await readWorkspaceState();
@@ -3668,7 +3701,8 @@ ipcMain.handle("openrind-desktop:workspace-config:write", async (_event, input) 
   return execResult(true, `Wrote ${configPath}`);
 });
 
-ipcMain.handle("openrind-desktop:workspace-config:add-authorized-root", async (_event, input) => {
+ipcMain.handle("openrind-desktop:workspace-config:add-authorized-root", async (event, input) => {
+  assertTrustedSender(event, "workspace-config:add-authorized-root");
   const workspacePath = String(input?.workspacePath ?? "").trim();
   const authorizedRoot = String(input?.folderPath ?? input?.authorizedRoot ?? "").trim();
   if (!workspacePath || !authorizedRoot) {
@@ -3697,10 +3731,12 @@ ipcMain.handle("openrind-desktop:workspace-config:add-authorized-root", async (_
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
   return execResult(true, `Wrote ${configPath}`);
 });
-ipcMain.handle("openrind-desktop:shell:openExternal", async (_event, url) => {
+ipcMain.handle("openrind-desktop:shell:openExternal", async (event, url) => {
+  assertTrustedSender(event, "shell:openExternal");
   await openExternalSafe(url);
 });
-ipcMain.handle("openrind-desktop:shell:relaunch", async () => {
+ipcMain.handle("openrind-desktop:shell:relaunch", async (event) => {
+  assertTrustedSender(event, "shell:relaunch");
   app.relaunch();
   app.exit(0);
 });
@@ -3711,6 +3747,9 @@ const { ensureAutoUpdater } = registerUpdaterIpc({
   ipcMain,
   getMainWindow: () => mainWindow,
 });
+
+const browserBroker = createOwnedContentsBroker({ getMainWindow: () => mainWindow });
+registerBrowserIpc({ broker: browserBroker, assertTrustedSender });
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

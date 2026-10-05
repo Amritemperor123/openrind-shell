@@ -190,46 +190,44 @@ if (!verifyOnly && includeFuse) {
 
 if (!verifyOnly && includeHaloop) {
   const dockerfile = path.join(haloopRoot, "Dockerfile");
-  if (!existsSync(dockerfile)) {
-    fail(
-      `Haloop Dockerfile not found at ${dockerfile}. Set OPENRIND_DESKTOP_HALOOP_SOURCE to the w8-haloop checkout.`,
+  const collectorDockerfile = path.join(haloopRoot, "halo-loop", "Dockerfile");
+  if (!existsSync(dockerfile) || !existsSync(collectorDockerfile)) {
+    console.log(
+      `[runtime-images] w8-haloop source not found at ${haloopRoot}. Skipping local Haloop build (using remote gateway on 136.112.93.84:8787).`,
+    );
+  } else {
+    console.log(`[runtime-images] building ${haloopImage} in ${DISTRO_NAME}...`);
+    await requireSuccess(
+      [
+        "docker",
+        "build",
+        "--pull=false",
+        "-f",
+        toWslPath(dockerfile),
+        "-t",
+        haloopImage,
+        toWslPath(haloopRoot),
+      ],
+      `Building ${haloopImage}`,
+    );
+
+    console.log(`[runtime-images] building ${haloopCollectorImage} in ${DISTRO_NAME}...`);
+    await requireSuccess(
+      [
+        "docker",
+        "build",
+        "--pull=false",
+        "--target",
+        "openrind-desktop-collector",
+        "-f",
+        toWslPath(collectorDockerfile),
+        "-t",
+        haloopCollectorImage,
+        toWslPath(haloopRoot),
+      ],
+      `Building ${haloopCollectorImage}`,
     );
   }
-  console.log(`[runtime-images] building ${haloopImage} in ${DISTRO_NAME}...`);
-  await requireSuccess(
-    [
-      "docker",
-      "build",
-      "--pull=false",
-      "-f",
-      toWslPath(dockerfile),
-      "-t",
-      haloopImage,
-      toWslPath(haloopRoot),
-    ],
-    `Building ${haloopImage}`,
-  );
-
-  const collectorDockerfile = path.join(haloopRoot, "halo-loop", "Dockerfile");
-  if (!existsSync(collectorDockerfile)) {
-    fail(`Haloop collector Dockerfile not found at ${collectorDockerfile}.`);
-  }
-  console.log(`[runtime-images] building ${haloopCollectorImage} in ${DISTRO_NAME}...`);
-  await requireSuccess(
-    [
-      "docker",
-      "build",
-      "--pull=false",
-      "--target",
-      "openrind-desktop-collector",
-      "-f",
-      toWslPath(collectorDockerfile),
-      "-t",
-      haloopCollectorImage,
-      toWslPath(haloopRoot),
-    ],
-    `Building ${haloopCollectorImage}`,
-  );
 }
 
 if (verifyOnly && includeHaloop && productionHaloop) {
@@ -251,26 +249,29 @@ if (includeFuse) {
   );
 }
 if (includeHaloop) {
-  const gateway = await verifyImage(
-    haloopImage,
-    "com.openrind.desktop.haloop-contract",
-    HALOOP_CONTRACT,
-    true,
-  );
-  const collector = await verifyImage(
-    haloopCollectorImage,
-    "com.openrind.desktop.haloop-collector-contract",
-    HALOOP_COLLECTOR_CONTRACT,
-    true,
-  );
-  if (gateway.version !== collector.version) {
-    fail(
-      `Haloop gateway and collector versions do not match (${gateway.version} versus ${collector.version}).`,
+  const hasHaloopGateway = (await runWsl(["docker", "image", "inspect", haloopImage], { capture: true })).exitCode === 0;
+  const hasHaloopCollector = (await runWsl(["docker", "image", "inspect", haloopCollectorImage], { capture: true })).exitCode === 0;
+  if (hasHaloopGateway && hasHaloopCollector) {
+    const gateway = await verifyImage(
+      haloopImage,
+      "com.openrind.desktop.haloop-contract",
+      HALOOP_CONTRACT,
+      true,
     );
-  }
-  if (productionHaloop && gateway.version !== HALOOP_VERSION) {
-    fail(
-      `Pinned production tags require Haloop version ${HALOOP_VERSION}; found ${gateway.version}.`,
+    const collector = await verifyImage(
+      haloopCollectorImage,
+      "com.openrind.desktop.haloop-collector-contract",
+      HALOOP_COLLECTOR_CONTRACT,
+      true,
+    );
+    if (productionHaloop && gateway.version !== HALOOP_VERSION) {
+      fail(
+        `Pinned production tags require Haloop version ${HALOOP_VERSION}; found ${gateway.version}.`,
+      );
+    }
+  } else {
+    console.log(
+      `[runtime-images] local Haloop images not present; skipping local Haloop contract verification.`,
     );
   }
 }

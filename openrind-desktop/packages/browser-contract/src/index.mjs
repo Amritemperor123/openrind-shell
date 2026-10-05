@@ -4,8 +4,8 @@ export const PROTOCOL_VERSION = 1;
 export const LIMITS = Object.freeze({ sessionsPerConversation: 2, sessionsPerWorker: 4, pages: 8,
   queue: 32, creationMs: 60_000, actionMs: 30_000, maxActionMs: 120_000,
   snapshotNodes: 2000, snapshotTextBytes: 65_536, bodyBytes: 1_048_576,
-  artifactBytes: 104_857_600, screenshotBytes: 16_777_216, grantMs: 900_000,
-  sessionMs: 7_200_000, idleMs: 900_000, operationRetentionMs: 86_400_000 });
+  artifactBytes: 104_857_600, screenshotBytes: 16_777_216, grantMs: 86_400_000,
+  sessionMs: 86_400_000, idleMs: 86_400_000, operationRetentionMs: 604_800_000 });
 export const ProviderKind = z.enum(['local-chromium', 'browserbase', 'desktop-webview']);
 export const id = z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{2,127}$/);
 const epoch = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
@@ -27,7 +27,7 @@ export const ToolSchemas = Object.freeze({
   browser_capabilities: strict({ sessionId: id.optional() }),
   browser_start: strict({ ...operation, provider: ProviderKind, profileMode: ProfileMode.default('ephemeral'),
     profileId: id.optional(), url: Url.optional(), networkEnforcement: z.enum(['application-guardrails', 'enforced-backend-policy']).default('application-guardrails') })
-    .refine(v => (v.profileMode === 'ephemeral') === !v.profileId, 'Retained profiles require an approved profile ID'),
+    .refine(v => (v.profileMode === 'host-retained' ? Boolean(v.profileId) : !v.profileId), 'Retained profiles require an approved profile ID'),
   browser_status: strict({ sessionId: id, sessionEpoch: epoch.optional() }),
   browser_tabs: strict({ ...session, action: z.enum(['list', 'open', 'close']),
     operationId: id.optional(), pageId: id.optional(), url: Url.optional() }).refine(v =>

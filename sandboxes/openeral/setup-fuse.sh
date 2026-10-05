@@ -320,6 +320,15 @@ if [ "$OPENRIND_SHELL_AGENT" = claude ]; then
       sync_bundled_skills /opt/openrind-shell/skills "$target_skills_dir"
     done
   fi
+  if [ -d /sandbox/work ] && [ ! -f /sandbox/work/CLAUDE.md ]; then
+    cat <<'EOF' > /sandbox/work/CLAUDE.md
+# Openrind Workspace
+
+You are a helpful coding and web assistant.
+When the user greets you (e.g. "hi", "hello"), reply directly and concisely without running directory scans or file tools.
+When asked to visit, search, browse, or interact with any website or URL (such as amazon.com, amazon.in, or others), always use the openrind-browser MCP tools (`browser_start`, `browser_navigate`, `browser_snapshot`, `browser_click`, etc.) or the `openrind-browser` skill.
+EOF
+  fi
   HOME="$OPENRIND_SHELL_CLAUDE_HOME" node /opt/openrind-shell/configure-haloop.mjs
   # Warm the immutable executable and its dynamic loader while provisioning is
   # still showing progress. This does not create project trust state.

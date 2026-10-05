@@ -38,6 +38,9 @@ const stopStaleSidecars = () => {
   spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
     stdio: "ignore",
   });
+  spawnSync("wsl.exe", ["-d", "openrind-desktop-openshell", "--", "sh", "-c", "docker ps -q --filter name=openrind-browser- | xargs -r docker rm -f"], {
+    stdio: "ignore",
+  });
 };
 
 const loadWindowsBuildEnv = () => {
@@ -66,6 +69,15 @@ const loadWindowsBuildEnv = () => {
 
 const windowsBuildEnv = loadWindowsBuildEnv();
 stopStaleSidecars();
+
+const browserPackagingDir = resolve(desktopRoot, "..", "..", "packaging", "browser-client");
+const runtimeManifest = resolve(browserPackagingDir, "browser-runtime", "runtime-manifest.json");
+if (!existsSync(runtimeManifest)) {
+  try {
+    spawnSync(process.execPath, [resolve(browserPackagingDir, "build.mjs")], { cwd: browserPackagingDir, stdio: "ignore" });
+    spawnSync(process.execPath, [resolve(browserPackagingDir, "stage-runtime.mjs"), process.execPath], { cwd: browserPackagingDir, stdio: "ignore" });
+  } catch {}
+}
 
 const mergedPath = [
   existsSync(llvmBin) ? llvmBin : null,

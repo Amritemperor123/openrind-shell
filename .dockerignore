@@ -20,6 +20,7 @@ openrind-desktop/packaging/browser-client/*
 !openrind-desktop/packaging/browser-client/provision-entry.mjs
 !openrind-desktop/packaging/browser-client/edge-entry.mjs
 !openrind-desktop/packaging/browser-client/worker-entry.mjs
+!openrind-desktop/packaging/browser-client/cli-entry.mjs
 !openrind-desktop/packaging/browser-client/bridge/
 !openrind-desktop/packaging/browser-client/bridge/**
 !openrind-desktop/packaging/browser-client/mcp.json
@@ -39,6 +40,10 @@ openrind-desktop/packages/browser-contract/*
 openrind-desktop/packages/browser-core/*
 !openrind-desktop/packages/browser-core/src/
 !openrind-desktop/packages/browser-core/src/**
+!openrind-desktop/packages/browser-drivers/
+openrind-desktop/packages/browser-drivers/*
+!openrind-desktop/packages/browser-drivers/src/
+!openrind-desktop/packages/browser-drivers/src/**
 !openrind-desktop/packages/browser-providers/
 openrind-desktop/packages/browser-providers/*
 !openrind-desktop/packages/browser-providers/src/

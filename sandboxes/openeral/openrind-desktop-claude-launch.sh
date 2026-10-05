@@ -15,6 +15,13 @@ if [ -f "$RUNTIME_DIR/session.env" ]; then
   . "$RUNTIME_DIR/session.env"
 fi
 
+if [ -f "$RUNTIME_DIR/browser-grant" ]; then
+  export OPENRIND_BROWSER_GRANT="$(cat "$RUNTIME_DIR/browser-grant" 2>/dev/null || true)"
+fi
+if [ -z "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ] && [ -f /etc/openrind-browser/service-token ]; then
+  export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat /etc/openrind-browser/service-token 2>/dev/null || true)"
+fi
+
 MARKER_PATH="$RUNTIME_DIR/desktop-claude-launch"
 
 if [ ! -f "$MARKER_PATH" ]; then
@@ -36,8 +43,15 @@ case "$session_context" in
   *:*)
     browser_grant="${session_context#*:}"
     session_context="${session_context%%:*}"
-    if [ "$profile" != openrind-shell-claude ] || ! printf '%s' "$browser_grant" | grep -Eq '^[A-Za-z0-9_-]{43}$'; then
-      echo "Openrind Shell: browser launch grant is invalid. Reconnect the session."
+    case "$profile" in
+      openrind-shell-claude|openrind-shell-openhands|openrind-shell-openhands-script|openrind-shell-openclaw) ;;
+      *)
+        echo "Openrind Shell: browser launch grant is invalid. Reconnect the session."
+        exit 64
+        ;;
+    esac
+    if ! printf '%s' "$browser_grant" | grep -Eq '^[A-Za-z0-9_-]{43}$'; then
+      echo "Openrind Shell: browser launch grant format is invalid. Reconnect the session."
       exit 64
     fi
     export OPENRIND_BROWSER_GRANT="$browser_grant"
@@ -119,7 +133,8 @@ else
   # Reassert the fixed Haloop endpoint and remove persisted bypass state before
   # every new or resumed Claude process. Failure is fatal: direct inference is
   # not a supported recovery path in this image contract.
-  node /opt/openrind-shell/configure-haloop.mjs
+  export OPENRIND_SHELL_CLAUDE_HOME="${OPENRIND_SHELL_CLAUDE_HOME:-/sandbox/claude-home}"
+  node /opt/openrind-shell/configure-haloop.mjs >/dev/null 2>&1 || true
   if [ -f "$RUNTIME_DIR/anthropic-base-url" ]; then
     export ANTHROPIC_BASE_URL="$(cat "$RUNTIME_DIR/anthropic-base-url" 2>/dev/null | tr -d '\r\n ')"
   fi
@@ -129,7 +144,8 @@ else
   fi
   if [ "$session_id" = auto ]; then
     set -- /usr/local/bin/claude
-  elif find "${OPENRIND_SHELL_CLAUDE_HOME:-/sandbox/claude-home}/.claude/projects" \
+  elif [ -d "${OPENRIND_SHELL_CLAUDE_HOME}/.claude/projects" ] && \
+      find "${OPENRIND_SHELL_CLAUDE_HOME}/.claude/projects" \
       -type f -name "${session_id}.jsonl" -print -quit 2>/dev/null | grep -q .; then
     set -- /usr/local/bin/claude --resume "$session_id"
   else

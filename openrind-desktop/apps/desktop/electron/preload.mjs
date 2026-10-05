@@ -141,7 +141,23 @@ contextBridge.exposeInMainWorld("__OPENRIND_DESKTOP_ELECTRON__", {
         ipcRenderer.removeListener("openrind-shell:pty-exit", handler);
       };
     },
-
+  },
+  browser: {
+    start(opts) { return ipcRenderer.invoke("openrind-desktop:browser:start", opts); },
+    navigate(opts) { return ipcRenderer.invoke("openrind-desktop:browser:navigate", opts); },
+    stop(opts) { return ipcRenderer.invoke("openrind-desktop:browser:stop", opts); },
+    takeControl(opts) { return ipcRenderer.invoke("openrind-desktop:browser:take-control", opts); },
+    resume(opts) { return ipcRenderer.invoke("openrind-desktop:browser:resume", opts); },
+    setBounds(opts) { return ipcRenderer.invoke("openrind-desktop:browser:set-bounds", opts); },
+    setVisible(opts) { return ipcRenderer.invoke("openrind-desktop:browser:set-visible", opts); },
+    status(opts) { return ipcRenderer.invoke("openrind-desktop:browser:status", opts); },
+    onEvent(callback) {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on("openrind-desktop:browser:event", handler);
+      return () => {
+        ipcRenderer.removeListener("openrind-desktop:browser:event", handler);
+      };
+    },
   },
   meta: {
     initialDeepLinks: [],
