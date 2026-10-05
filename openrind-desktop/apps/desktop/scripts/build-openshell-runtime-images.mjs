@@ -264,20 +264,14 @@ if (includeHaloop) {
       HALOOP_COLLECTOR_CONTRACT,
       true,
     );
-    if (gateway.version !== collector.version) {
+    if (productionHaloop && gateway.version !== HALOOP_VERSION) {
       fail(
-        `Haloop gateway and collector versions do not match (${gateway.version} versus ${collector.version}).`,
+        `Pinned production tags require Haloop version ${HALOOP_VERSION}; found ${gateway.version}.`,
       );
     }
   } else {
     console.log(
       `[runtime-images] local Haloop images not present; skipping local Haloop contract verification.`,
-    );
-  }
-}
-  if (productionHaloop && gateway.version !== HALOOP_VERSION) {
-    fail(
-      `Pinned production tags require Haloop version ${HALOOP_VERSION}; found ${gateway.version}.`,
     );
   }
 }
