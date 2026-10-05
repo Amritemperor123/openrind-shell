@@ -84,9 +84,30 @@ export function parseTool(name, input, { local = false } = {}) {
   if (!result.success) throw new BrowserFault('INVALID_ARGUMENT');
   return result.data;
 }
+const TOOL_DESCRIPTIONS = Object.freeze({
+  browser_start: 'Start a browser session. Returns sessionId, sessionEpoch, and initial pageId.',
+  browser_status: 'Get current status, state, active pages, and capabilities of the browser session.',
+  browser_tabs: 'Manage browser tabs (list, open new tab with url, or close tab).',
+  browser_navigate: 'Navigate the active page to an HTTPS URL.',
+  browser_snapshot: 'Capture a structured semantic snapshot and interactive controls list of the current page. Returns element coordinates (x, y, width, height), center points, visibility/hit-test status, and stable [ref=...] IDs for clicking and filling interactive inputs.',
+  browser_click: 'Click an interactive element identified by its ref (e.g. from browser_snapshot).',
+  browser_fill: 'Type text into an editable input or textarea identified by its ref (e.g. from browser_snapshot).',
+  browser_select: 'Select an option in a dropdown combobox identified by its ref.',
+  browser_press: 'Press a keyboard key (e.g. Enter, Tab, Escape, Space, ArrowDown). Use Enter to submit forms after filling input.',
+  browser_scroll: 'Scroll the page in a direction (up, down, left, right) by a pixel distance (e.g. 800) to bring off-screen elements into view.',
+  browser_screenshot: 'Capture a PNG screenshot of the current page viewport or a specific region.',
+  browser_upload_file: 'Attach a staged file artifact to a file input element identified by its ref.',
+  browser_downloads: 'List files downloaded in the browser session.',
+  browser_take_control: 'Pause agent automation for interactive human user control.',
+  browser_resume: 'Resume agent automation after human control handoff is released.',
+  browser_close: 'Close the browser session and clean up all resources.',
+  browser_import_file: 'Import a local workspace file as an artifact for upload in the browser.',
+  browser_save_artifact: 'Save a downloaded browser artifact to the local workspace.',
+});
+
 export function toolDefinitions({ local = false } = {}) {
   return (local ? Object.keys(ToolSchemas) : REMOTE_TOOLS).map(name => ({ name,
-    description: `Openrind ${name.slice(8).replaceAll('_', ' ')}. Explicit session ownership and capability checks apply.`,
+    description: TOOL_DESCRIPTIONS[name] || `Openrind ${name.slice(8).replaceAll('_', ' ')}. Explicit session ownership and capability checks apply.`,
     inputSchema: z.toJSONSchema(ToolSchemas[name], { unrepresentable: 'any' }) }));
 }
 export const Principal = strict({ tenantId: id, workspaceId: id, sandboxId: id, conversationId: id,

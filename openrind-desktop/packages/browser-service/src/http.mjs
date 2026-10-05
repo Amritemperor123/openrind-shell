@@ -2,8 +2,18 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { failure, LIMITS } from '@openrind/browser-contract';
 
 const digest = value => createHash('sha256').update(value).digest();
-const result = value => ({ ...(value.ok === false ? { isError: true } : {}),
-  content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
+const result = value => {
+  const isErr = value.ok === false;
+  let text = JSON.stringify(value);
+  if (value.data?.summary) {
+    text = `${value.data.summary}\n\n=== Raw DOM Tree ===\n${JSON.stringify(value)}`;
+  }
+  return {
+    ...(isErr ? { isError: true } : {}),
+    content: [{ type: 'text', text }],
+    structuredContent: value
+  };
+};
 
 // A host attaches this handler only to its provisioned private listener/bridge.
 // This module never selects a bind address or exposes trusted control methods.

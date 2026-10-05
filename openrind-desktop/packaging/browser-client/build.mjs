@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdir, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -32,3 +32,28 @@ await writeFile(new URL('manifest.json', output), JSON.stringify({ protocol: 1,
   sdk: '1.30.0', undici: '7.29.1', zod: '4.3.6', cborg: '6.1.2',
   sha256: hashes,
 }, null, 2) + '\n');
+
+// On Windows, stage browser-runtime for Desktop automatically
+if (process.platform === 'win32') {
+  const runtimeDir = new URL('./browser-runtime/', import.meta.url);
+  await mkdir(runtimeDir, { recursive: true });
+  await copyFile(process.execPath, new URL('node.exe', runtimeDir)).catch(() => {});
+  await copyFile(new URL('./dist/worker.cjs', import.meta.url), new URL('worker.cjs', runtimeDir));
+  await copyFile(new URL('./dist/edge.cjs', import.meta.url), new URL('edge.cjs', runtimeDir));
+  const runtimeHashes = {};
+  for (const file of ['node.exe', 'worker.cjs', 'edge.cjs']) {
+    try {
+      const data = await readFile(new URL(file, runtimeDir));
+      runtimeHashes[file] = createHash('sha256').update(data).digest('hex');
+    } catch {}
+  }
+  const manifest = {
+    protocol: 1,
+    platform: 'win32',
+    arch: process.arch,
+    nodeVersion: process.versions.node,
+    sha256: runtimeHashes,
+  };
+  await writeFile(new URL('runtime-manifest.json', runtimeDir), JSON.stringify(manifest, null, 2) + '\n');
+  console.log('[build] Staged browser-runtime for Desktop with node ' + process.versions.node);
+}
