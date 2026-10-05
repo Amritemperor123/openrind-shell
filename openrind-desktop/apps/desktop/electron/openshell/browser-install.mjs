@@ -38,7 +38,7 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
 
   if (serviceToken) {
     const tokenRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', ids[0],
-      'sh', '-c', 'mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime && cat > /etc/openrind-browser/service-token && chmod 600 /etc/openrind-browser/service-token && printf "export OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n" "$(cat /etc/openrind-browser/service-token)" > /var/lib/openrind-shell/runtime/browser.env && chmod 600 /var/lib/openrind-shell/runtime/browser.env && chown 1000:1000 /var/lib/openrind-shell/runtime/browser.env /etc/openrind-browser/service-token'], {
+      'sh', '-c', 'mkdir -p /etc/openrind-browser && cat > /etc/openrind-browser/service-token && chmod 644 /etc/openrind-browser/service-token'], {
       stdin: serviceToken.trim(),
       timeout: 15_000,
     }).catch(err => ({ exitCode: -1, stderr: String(err) }));

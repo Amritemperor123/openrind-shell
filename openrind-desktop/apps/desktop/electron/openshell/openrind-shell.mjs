@@ -180,32 +180,17 @@ export async function writeCurrentSessionMarker(name, value, browserGrant, brows
     `  printf '\\n%s\\n' ${shellQuote(interactiveHook)} >> /sandbox/.bashrc`,
     `fi`,
   ].join("\n");
+  const writeBrowserGrant = browserGrant
+    ? `printf %s ${shellQuote(browserGrant)} > /var/lib/openrind-shell/runtime/browser-grant; chmod 600 /var/lib/openrind-shell/runtime/browser-grant;`
+    : "";
+  const writeApiKey = apiKey
+    ? `printf 'export OPENROUTER_API_KEY=%s\\nexport ANTHROPIC_API_KEY=%s\\n' ${shellQuote(apiKey)} ${shellQuote(apiKey)} > /var/lib/openrind-shell/runtime/api-key.env; chmod 600 /var/lib/openrind-shell/runtime/api-key.env;`
+    : "";
   const script = marker
-    ? [
-        `set -eu`,
-        `umask 077`,
-        repairHook,
-        `mkdir -p /var/lib/openrind-shell/runtime`,
-        `IFS= read -r marker_line || true`,
-        `IFS= read -r grant_line || true`,
-        `IFS= read -r token_line || true`,
-        `IFS= read -r key_line || true`,
-        `printf %s ${shellQuote(name)} > /var/lib/openrind-shell/runtime/sandbox-name`,
-        `if [ -n "$key_line" ]; then printf 'export OPENROUTER_API_KEY=%s\\nexport ANTHROPIC_API_KEY=%s\\n' "$key_line" "$key_line" > /var/lib/openrind-shell/runtime/api-key.env; chmod 600 /var/lib/openrind-shell/runtime/api-key.env; fi`,
-        `if [ -n "$grant_line" ]; then printf %s "$grant_line" > /var/lib/openrind-shell/runtime/browser-grant; chmod 600 /var/lib/openrind-shell/runtime/browser-grant; fi`,
-        `if [ -n "$token_line" ]; then mkdir -p /etc/openrind-browser; printf %s "$token_line" > /etc/openrind-browser/service-token 2>/dev/null || true; fi`,
-        `if [ -n "$grant_line" ] && [ -n "$token_line" ]; then printf 'export OPENRIND_BROWSER_GRANT=%s\\nexport OPENRIND_BROWSER_SERVICE_TOKEN=%s\\n' "$grant_line" "$token_line" > /var/lib/openrind-shell/runtime/browser.env; chmod 600 /var/lib/openrind-shell/runtime/browser.env; fi`,
-        `printf '%s\\n' "$marker_line" > ${SESSION_MARKER_PATH}`,
-        `chmod 600 ${SESSION_MARKER_PATH}`
-      ].join('; ')
+    ? `set -eu; umask 077; ${repairHook}; mkdir -p /var/lib/openrind-shell/runtime; ${writeApiKey} ${writeBrowserGrant} printf %s ${shellQuote(name)} > /var/lib/openrind-shell/runtime/sandbox-name; cat > ${SESSION_MARKER_PATH}; chmod 600 ${SESSION_MARKER_PATH}`
     : `rm -f ${SESSION_MARKER_PATH}`;
   // Credentials travel through stdin rather than appearing in process arguments.
-  const payload = [
-    browserGrant === undefined ? marker : `${marker}:${browserGrant}`,
-    browserGrant || "",
-    browserServiceToken || "",
-    apiKey || "",
-  ].join("\n") + "\n";
+  const payload = browserGrant === undefined ? marker : `${marker}:${browserGrant}`;
   const result = await runMarkerScript(name, script, 30_000, payload);
   if (result.exitCode !== 0) throw markerError("launch-marker write", result);
 }
