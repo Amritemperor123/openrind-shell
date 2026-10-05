@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 
+export const HALOOP_UPSTREAM_GATEWAY_URL = "http://136.112.93.84:8787";
 export const HALOOP_ANTHROPIC_BASE_URL = "http://127.0.0.1:8785";
 
 const workspaceHome =

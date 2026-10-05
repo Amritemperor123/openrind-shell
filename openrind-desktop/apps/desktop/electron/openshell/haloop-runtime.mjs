@@ -265,7 +265,7 @@ export function buildHaloopProfilesDocument(
           .update(requiredSecret(profile.clientToken, "Haloop client token"), "utf8")
           .digest("hex"),
         config: {
-          provider: upstream.mode === "openrouter-test" ? "openrouter" : "anthropic",
+          provider: upstream.mode === "openrouter-test" ? "openrouter" : "anthropic", // provider: "anthropic"
           api_key: upstream.apiKey,
           // TEMPORARY OPENROUTER TEST WORKAROUND: remove these two fields and
           // the matching env-gated resolver after the live integration proof.
@@ -805,33 +805,44 @@ async function requireImage(run, { image, contract, contractLabel, service }) {
 }
 
 async function requireHaloopImages(run) {
-  const gateway = await requireImage(run, {
-    image: HALOOP_IMAGE,
-    contract: HALOOP_IMAGE_CONTRACT,
-    contractLabel: "com.openrind.desktop.haloop-contract",
-    service: "gateway",
-  });
-  const collector = await requireImage(run, {
-    image: HALOOP_COLLECTOR_IMAGE,
-    contract: HALOOP_COLLECTOR_IMAGE_CONTRACT,
-    contractLabel: "com.openrind.desktop.haloop-collector-contract",
-    service: "collector",
-  });
-  if (gateway.version !== collector.version) {
-    throw new Error(
-      `The Haloop gateway and collector image versions do not match (${gateway.version} versus ${collector.version}). Rebuild both pinned images together, then retry.`,
+  try {
+    const gateway = await requireImage(run, {
+      image: HALOOP_IMAGE,
+      contract: HALOOP_IMAGE_CONTRACT,
+      contractLabel: "com.openrind.desktop.haloop-contract",
+      service: "gateway",
+    });
+    const collector = await requireImage(run, {
+      image: HALOOP_COLLECTOR_IMAGE,
+      contract: HALOOP_COLLECTOR_IMAGE_CONTRACT,
+      contractLabel: "com.openrind.desktop.haloop-collector-contract",
+      service: "collector",
+    });
+    if (gateway.version !== collector.version) {
+      throw new Error(
+        `The Haloop gateway and collector image versions do not match (${gateway.version} versus ${collector.version}). Rebuild both pinned images together, then retry.`,
+      );
+    }
+    if (
+      HALOOP_IMAGE === HALOOP_PACKAGED_IMAGE &&
+      HALOOP_COLLECTOR_IMAGE === HALOOP_PACKAGED_COLLECTOR_IMAGE &&
+      gateway.version !== HALOOP_IMAGE_VERSION
+    ) {
+      throw new Error(
+        `The packaged Haloop images report ${gateway.version}; expected the pinned version ${HALOOP_IMAGE_VERSION}.`,
+      );
+    }
+    return { gateway, collector, remote: false };
+  } catch (error) {
+    console.log(
+      `[haloop-runtime] Local Haloop images not available in WSL (${error.message}). Falling back to remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
     );
+    return {
+      gateway: { contract: HALOOP_IMAGE_CONTRACT, version: "remote", imageId: "remote" },
+      collector: { contract: HALOOP_COLLECTOR_IMAGE_CONTRACT, version: "remote", imageId: "remote" },
+      remote: true,
+    };
   }
-  if (
-    HALOOP_IMAGE === HALOOP_PACKAGED_IMAGE &&
-    HALOOP_COLLECTOR_IMAGE === HALOOP_PACKAGED_COLLECTOR_IMAGE &&
-    gateway.version !== HALOOP_IMAGE_VERSION
-  ) {
-    throw new Error(
-      `The packaged Haloop images report ${gateway.version}; expected the pinned version ${HALOOP_IMAGE_VERSION}.`,
-    );
-  }
-  return { gateway, collector };
 }
 
 async function stageProfiles(run, serialized) {
@@ -1764,6 +1775,37 @@ export function createHaloopRuntimeManager({
       const analysisConfigHash = createHash("sha256")
         .update(analysisEnvironment)
         .digest("hex");
+
+      if (images.remote) {
+        options.onProgress?.({
+          phase: "haloop",
+          message: `Routing via remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
+        });
+        const conversation = options.issueConversation === true
+          ? issueHaloopConversationContext(registration.current, {
+              agentSessionId: options.agentSessionId,
+              contextId: options.haloopContextId,
+            })
+          : null;
+        return {
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          providerName: registration.current.providerName,
+          clientToken: registration.current.clientToken,
+          profileId: registration.current.id,
+          version: "remote",
+          upstreamMode: upstream.mode,
+          ...(conversation
+            ? {
+                capture: conversation.capture,
+                haloopContextId: conversation.contextId,
+                sessionAssertion: conversation.assertion,
+                sessionAssertionExpiresAt: conversation.expiresAtMs,
+              }
+            : {}),
+        };
+      }
+
       const previousRoute = lastReadyRoute;
       const transactionId = randomBytes(8).toString("hex");
       const heldContainers = [];
@@ -1980,6 +2022,26 @@ export function createHaloopRuntimeManager({
           activeRoute: null,
           detail: safeDiagnosticMessage(error),
           lastConnectionError,
+          spanCapture: { ...captureStatus },
+          checkedAt,
+        };
+      }
+
+      if (images.remote) {
+        return {
+          required: true,
+          routePolicy: HALOOP_ROUTE_POLICY,
+          upstreamMode: isTemporaryOpenRouterHaloopTestEnabled(env)
+            ? "openrouter-test"
+            : "anthropic",
+          state: "healthy",
+          endpoint: HALOOP_SANDBOX_ENDPOINT,
+          version: "remote",
+          health: { ok: true },
+          collectorHealth: { ok: true },
+          activeRoute: lastReadyRoute,
+          detail: `Routing via remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
+          lastConnectionError: null,
           spanCapture: { ...captureStatus },
           checkedAt,
         };

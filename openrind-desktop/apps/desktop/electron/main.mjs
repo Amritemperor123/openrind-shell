@@ -842,7 +842,7 @@ function openOpenrindShellPtySession(opts) {
       try {
         let upstreamKey = "";
       try { upstreamKey = await openrindShell.requiredHaloopUpstreamApiKey(); } catch {}
-      upstreamKey = (upstreamKey || process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY || "").trim();
+      upstreamKey = (upstreamKey || process.env.ANTHROPIC_API_KEY || "").trim();
       await writeOpenrindShellSessionMarker(
         sandboxName,
         profile,

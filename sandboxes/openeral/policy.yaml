@@ -95,27 +95,6 @@ network_policies:
       - { path: /usr/local/bin/claude-real }
       - { path: /usr/local/bin/openrind-openclaw-agent }
       - { path: /usr/local/bin/openrind-openhands-agent }
-      - { path: /usr/bin/node }
-
-  # --- Openrind Browser service ---
-  openrind_browser:
-    name: openrind-browser
-    endpoints:
-      - host: host.openshell.internal
-        port: 18789
-        ports: [18789]
-        protocol: rest
-        tls: none
-        enforcement: enforce
-        rules:
-          - allow: { method: POST, path: "/mcp" }
-          - allow: { method: GET, path: "/mcp" }
-          - allow: { method: DELETE, path: "/mcp" }
-    binaries:
-      - { path: /usr/local/bin/openrind-browser-client }
-      - { path: /usr/bin/node }
-      - { path: /usr/local/bin/browser }
-      - { path: /usr/bin/curl }
 
   # --- Claude telemetry and static resources (no inference credential) ---
   claude_support:
@@ -279,3 +258,23 @@ network_policies:
     - { host: default.exp-tas.com, port: 443 }
     binaries:
     - { path: /usr/lib/node_modules/@github/copilot/node_modules/@github/**/copilot }
+
+  # --- Openrind Browser service ---
+  openrind_browser:
+    name: openrind-browser
+    endpoints:
+      - host: host.openshell.internal
+        port: 18789
+        ports: [18789]
+        protocol: rest
+        tls: none
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/mcp" }
+          - allow: { method: GET, path: "/mcp" }
+          - allow: { method: DELETE, path: "/mcp" }
+    binaries:
+      - { path: /usr/local/bin/openrind-browser-client }
+      - { path: /usr/bin/node }
+      - { path: /usr/local/bin/browser }
+      - { path: /usr/bin/curl }
