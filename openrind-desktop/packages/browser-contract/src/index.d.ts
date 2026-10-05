@@ -21,8 +21,28 @@ export type ResolvedPageAction =
   | { kind: 'press'; key: string }
   | { kind: 'scroll'; direction: 'up' | 'down' | 'left' | 'right'; distance: number };
 export interface SnapshotOptions { depth: number; maxNodes: number; maxTextBytes: number }
-export interface RawSnapshotNode { kind: 'element' | 'text' | 'frame-boundary'; frameId: string; handle?: unknown; role?: string; name?: string; text?: string; sensitive?: boolean; editable?: boolean; checked?: boolean; disabled?: boolean; children?: RawSnapshotNode[] }
-export interface RawSnapshot { documentGeneration: number; nodes: RawSnapshotNode[] }
+export interface RawSnapshotNode {
+  kind: 'element' | 'text' | 'frame-boundary';
+  frameId: string;
+  handle?: unknown;
+  role?: string;
+  name?: string;
+  text?: string;
+  sensitive?: boolean;
+  editable?: boolean;
+  checked?: boolean;
+  disabled?: boolean;
+  bounds?: { x: number; y: number; width: number; height: number };
+  center?: [number, number];
+  inViewport?: boolean;
+  hitTestable?: boolean;
+  children?: RawSnapshotNode[];
+}
+export interface RawSnapshot {
+  documentGeneration: number;
+  summary?: string;
+  nodes: RawSnapshotNode[];
+}
 export interface ArtifactSource { bytes: AsyncIterable<Uint8Array>; mimeType: string; expectedBytes?: number }
 export interface ApprovedUpload { artifactId: string; bytes: AsyncIterable<Uint8Array>; size: number; sha256: string; mimeType: string }
 export interface PageDriver {

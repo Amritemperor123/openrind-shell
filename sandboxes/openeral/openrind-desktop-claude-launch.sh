@@ -15,8 +15,16 @@ if [ -f "$RUNTIME_DIR/session.env" ]; then
   . "$RUNTIME_DIR/session.env"
 fi
 
-if [ -f "$RUNTIME_DIR/browser-grant" ]; then
+if [ -f "$RUNTIME_DIR/browser.env" ]; then
+  # shellcheck disable=SC1090
+  . "$RUNTIME_DIR/browser.env"
+fi
+
+if [ -z "${OPENRIND_BROWSER_GRANT:-}" ] && [ -f "$RUNTIME_DIR/browser-grant" ]; then
   export OPENRIND_BROWSER_GRANT="$(cat "$RUNTIME_DIR/browser-grant" 2>/dev/null || true)"
+fi
+if [ -z "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ] && [ -f "$RUNTIME_DIR/browser-token" ]; then
+  export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat "$RUNTIME_DIR/browser-token" 2>/dev/null || true)"
 fi
 if [ -z "${OPENRIND_BROWSER_SERVICE_TOKEN:-}" ] && [ -f /etc/openrind-browser/service-token ]; then
   export OPENRIND_BROWSER_SERVICE_TOKEN="$(cat /etc/openrind-browser/service-token 2>/dev/null || true)"
@@ -38,7 +46,6 @@ profile="${marker%%:*}"
 marker_remainder="${marker#*:}"
 session_id="${marker_remainder%%:*}"
 session_context="${marker_remainder#*:}"
-unset OPENRIND_BROWSER_GRANT
 case "$session_context" in
   *:*)
     browser_grant="${session_context#*:}"
@@ -56,6 +63,11 @@ case "$session_context" in
     fi
     export OPENRIND_BROWSER_GRANT="$browser_grant"
     unset browser_grant
+    ;;
+  *)
+    if [ -z "${OPENRIND_BROWSER_GRANT:-}" ] && [ -f "$RUNTIME_DIR/browser-grant" ]; then
+      export OPENRIND_BROWSER_GRANT="$(cat "$RUNTIME_DIR/browser-grant" 2>/dev/null || true)"
+    fi
     ;;
 esac
 

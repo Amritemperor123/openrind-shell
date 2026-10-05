@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BrowserCore, Repository } from '../src/index.mjs';
-import { parseTool, ToolSchemas, toolDefinitions, BrowserFault } from '@openrind/browser-contract';
+import { parseTool, ToolSchemas, toolDefinitions, BrowserFault, LIMITS } from '@openrind/browser-contract';
 import { fixtureProvider } from './fixture.mjs';
 
 const scope = { tenantId: 'tenant_test', workspaceId: 'workspace_test', sandboxId: 'sandbox_test', conversationId: 'conversation_test' };
@@ -134,7 +134,7 @@ test('expired grants fail closed and expired sessions are reaped without deletin
   const { core, repo, grant, session } = await setup(t, { clock: () => now });
   const auth = core.grants.authenticate(grant.token);
   repo.saveOperation({ owner: auth.owner, id: 'op_unknown_expired', session: session.sessionId, hash: 'hash', state: 'unknown', expiresAt: now - 1 });
-  now += 900_001;
+  now += LIMITS.grantMs + 1;
   assert.equal((await core.call(grant.token, 'browser_status', session)).code, 'UNAUTHORIZED');
   assert.equal((await core.sweep())[0].closed, true);
   assert.equal(repo.operation(auth.owner, 'op_unknown_expired').state, 'unknown');
@@ -217,4 +217,79 @@ test('core contains no Electron/provider SDK imports or driver code execution es
     assert(!/from ['"](?:electron|playwright|@browserbasehq\/sdk)['"]/.test(text), name);
     assert(!/\.executeJavaScript\(|\.sendCommand\(|\.evaluate\(/.test(text), name);
   }
+});
+test('spatial awareness, coordinates, interactive control summaries, and ref stability across snapshots on the same generation', async t => {
+  const { core, grant, page } = await setup(t, {
+    snapshotNodes: [
+      {
+        kind: 'element',
+        frameId: 'frame_fixture',
+        role: 'textbox',
+        name: 'Search Amazon',
+        handle: 'h_search',
+        bounds: { x: 240, y: 15, width: 800, height: 40 },
+        center: [640, 35],
+        inViewport: true,
+        hitTestable: true,
+        editable: true,
+      },
+      {
+        kind: 'element',
+        frameId: 'frame_fixture',
+        role: 'button',
+        name: 'Go',
+        handle: 'h_go',
+        bounds: { x: 1045, y: 15, width: 45, height: 40 },
+        center: [1067, 35],
+        inViewport: true,
+        hitTestable: true,
+      },
+      {
+        kind: 'element',
+        frameId: 'frame_fixture',
+        role: 'link',
+        name: 'Search, alt, forward slash',
+        handle: 'h_shortcut',
+        bounds: { x: -1, y: -1, width: 1, height: 1 },
+        center: [-1, -1],
+        inViewport: false,
+        hitTestable: false,
+      },
+    ]
+  });
+
+  // First snapshot
+  const snap1 = await core.call(grant.token, 'browser_snapshot', page);
+  assert.equal(snap1.ok, true);
+  assert.ok(snap1.data.summary);
+  assert.match(snap1.data.summary, /=== Interactive Controls \(in viewport\) ===/);
+  assert.match(snap1.data.summary, /textbox "Search Amazon"/);
+  assert.match(snap1.data.summary, /bounds: x=240, y=15, w=800, h=40/);
+  assert.match(snap1.data.summary, /center: \(640, 35\)/);
+  assert.match(snap1.data.summary, /\[hit-testable, editable\]/);
+  assert.match(snap1.data.summary, /=== Off-screen \/ Scrolled Controls/);
+  assert.match(snap1.data.summary, /link "Search, alt, forward slash"/);
+
+  const searchNode1 = snap1.data.nodes.find(n => n.name === 'Search Amazon');
+  assert.ok(searchNode1.ref);
+  assert.deepEqual(searchNode1.bounds, { x: 240, y: 15, width: 800, height: 40 });
+  assert.deepEqual(searchNode1.center, [640, 35]);
+  assert.equal(searchNode1.inViewport, true);
+  assert.equal(searchNode1.hitTestable, true);
+
+  // Second snapshot on the SAME document generation:
+  // Must reuse or keep existing ref valid!
+  const snap2 = await core.call(grant.token, 'browser_snapshot', { ...page, depth: 4 });
+  assert.equal(snap2.ok, true);
+  const searchNode2 = snap2.data.nodes.find(n => n.name === 'Search Amazon');
+  assert.equal(searchNode2.ref, searchNode1.ref);
+
+  // The ref acquired in snapshot 1 MUST be fillable without throwing STALE_REF
+  const fillRes = await core.call(grant.token, 'browser_fill', {
+    ...page,
+    ref: searchNode1.ref,
+    operationId: 'op_fill_stable',
+    text: 'iphone duo',
+  });
+  assert.equal(fillRes.ok, true, JSON.stringify(fillRes));
 });

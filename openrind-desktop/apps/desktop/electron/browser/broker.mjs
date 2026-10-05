@@ -190,15 +190,50 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
           let textBytes = 0;
           let idCounter = 0;
 
-          const isVisible = el => {
+          const getGeometry = el => {
+            if (!el || el.nodeType !== 1) return null;
+            const rect = el.getBoundingClientRect();
+            const bounds = {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+            const center = [
+              Math.round(rect.x + rect.width / 2),
+              Math.round(rect.y + rect.height / 2),
+            ];
+            const hasSize = bounds.width > 0 && bounds.height > 0;
+            const vpW = window.innerWidth || document.documentElement.clientWidth || 1024;
+            const vpH = window.innerHeight || document.documentElement.clientHeight || 768;
+            const inViewport = hasSize &&
+              rect.bottom > 0 &&
+              rect.top < vpH &&
+              rect.right > 0 &&
+              rect.left < vpW;
+
+            let hitTestable = false;
+            if (inViewport && center[0] >= 0 && center[1] >= 0 && center[0] < vpW && center[1] < vpH) {
+              try {
+                const hit = document.elementFromPoint(center[0], center[1]);
+                hitTestable = Boolean(hit && (hit === el || el.contains(hit) || hit.contains(el)));
+              } catch {
+                hitTestable = false;
+              }
+            }
+            return { bounds, center, inViewport, hitTestable, hasSize };
+          };
+
+          const isVisible = (el, geo) => {
             if (!el || el.nodeType !== 1) return true;
             const style = window.getComputedStyle(el);
-            return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+            return true;
           };
 
           const getRole = el => {
             const explicit = el.getAttribute('role');
-            if (explicit) return explicit;
+            if (explicit) return explicit.toLowerCase();
             const tag = el.tagName.toLowerCase();
             if (tag === 'button') return 'button';
             if (tag === 'a' && el.hasAttribute('href')) return 'link';
@@ -206,7 +241,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
             if (tag === 'textarea') return 'textbox';
             if (tag === 'input') {
               const type = (el.type || 'text').toLowerCase();
-              if (['button', 'submit', 'reset'].includes(type)) return 'button';
+              if (['button', 'submit', 'reset', 'image'].includes(type)) return 'button';
               if (type === 'checkbox') return 'checkbox';
               if (type === 'radio') return 'radio';
               return 'textbox';
@@ -216,18 +251,30 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
           };
 
           const getName = el => {
-            if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+            const aria = el.getAttribute('aria-label');
+            if (aria && aria.trim()) return aria.trim();
             if (el.id) {
-              const label = document.querySelector('label[for="' + el.id + '"]');
-              if (label) return label.textContent.trim();
+              try {
+                const label = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+                if (label && label.textContent.trim()) return label.textContent.trim();
+              } catch {}
             }
             const parentLabel = el.closest('label');
-            if (parentLabel) return parentLabel.textContent.trim();
-            if (el.tagName.toLowerCase() === 'input' && ['button', 'submit'].includes(el.type)) return el.value;
-            if (['button', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(el.tagName.toLowerCase())) {
-              return el.textContent.trim();
+            if (parentLabel && parentLabel.textContent.trim()) return parentLabel.textContent.trim();
+            if (el.tagName.toLowerCase() === 'input') {
+              const type = (el.type || 'text').toLowerCase();
+              if (['button', 'submit', 'reset'].includes(type) && el.value) return el.value.trim();
+              if (el.placeholder && el.placeholder.trim()) return el.placeholder.trim();
+              if (el.getAttribute('title')) return el.getAttribute('title').trim();
+              if (el.name) return el.name;
             }
-            return el.placeholder || undefined;
+            if (['button', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(el.tagName.toLowerCase())) {
+              const text = el.textContent.trim();
+              if (text) return text.length > 200 ? text.slice(0, 197) + '...' : text;
+            }
+            if (el.placeholder && el.placeholder.trim()) return el.placeholder.trim();
+            if (el.getAttribute('title')) return el.getAttribute('title').trim();
+            return undefined;
           };
 
           function traverse(node, currentDepth) {
@@ -242,7 +289,8 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
             }
 
             if (node.nodeType === 1) {
-              if (!isVisible(node)) return null;
+              const geo = getGeometry(node);
+              if (!isVisible(node, geo)) return null;
               const tag = node.tagName.toLowerCase();
               if (['script', 'style', 'noscript', 'svg', 'path', 'meta', 'link'].includes(tag)) return null;
 
@@ -266,6 +314,12 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
                 ...(role === 'textbox' ? { editable: true } : {}),
                 ...(node.checked !== undefined && ['checkbox', 'radio'].includes(role) ? { checked: Boolean(node.checked) } : {}),
                 ...(node.disabled !== undefined ? { disabled: Boolean(node.disabled) } : {}),
+                ...(geo ? {
+                  bounds: geo.bounds,
+                  center: geo.center,
+                  inViewport: geo.inViewport,
+                  hitTestable: geo.hitTestable,
+                } : {}),
                 ...(handle ? { handle } : {})
               };
 

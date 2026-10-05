@@ -825,15 +825,17 @@ function openOpenrindShellPtySession(opts) {
       if (prepareBrowserLease) {
         browserLease = await prepareBrowserLease();
       } else if (profile === 'openrind-shell-claude' || profile === 'openrind-shell-openhands' || profile === 'openrind-shell-openhands-script' || profile === 'openrind-shell-openclaw') {
-        for (let attempt = 1; attempt <= 2; attempt++) {
+        for (let attempt = 1; attempt <= 3; attempt++) {
           try {
             browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
-            break;
+            if (browserLease?.token && browserLease?.serviceToken) break;
           } catch (error) {
             console.warn(`Browser runtime setup attempt ${attempt} failed:`, error);
-            if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
-            else browserLease = undefined;
+            if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
           }
+        }
+        if (!browserLease?.token || !browserLease?.serviceToken) {
+          throw new Error(`Failed to initialize browser runtime for sandbox ${sandboxName}: browser credentials could not be secured.`);
         }
       }
 
@@ -852,6 +854,13 @@ function openOpenrindShellPtySession(opts) {
         browserLease?.serviceToken,
         upstreamKey,
       );
+      // Explicit verification check: confirm credentials exist and are valid inside container
+      const credCheck = await openrindShell.verifySandboxBrowserCredentials(sandboxName);
+      if (!credCheck.ok) {
+        console.warn(`[sandbox-launch] Preflight browser credential check failed for ${sandboxName}:`, credCheck.error);
+        throw new Error(`Sandbox launch aborted: browser credentials verification failed inside ${sandboxName} (${credCheck.error}).`);
+      }
+      console.log(`[sandbox-launch] ${sandboxName}: Browser credentials and MCP endpoints successfully verified before launch.`);
       // Even a desktop launch without a session id writes the `auto` marker, so
       // every fresh connect must wait for this marker to be consumed.
       openrindMarkerPending.add(sandboxName);

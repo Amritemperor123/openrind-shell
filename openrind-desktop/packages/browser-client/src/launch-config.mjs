@@ -50,6 +50,9 @@ export function browserCredentials(env) {
   if (!serviceToken && existsSync('/etc/openrind-browser/service-token')) {
     try { serviceToken = readFileSync('/etc/openrind-browser/service-token', 'utf8').trim(); } catch {}
   }
+  if (!serviceToken && existsSync('/var/lib/openrind-shell/runtime/browser-token')) {
+    try { serviceToken = readFileSync('/var/lib/openrind-shell/runtime/browser-token', 'utf8').trim(); } catch {}
+  }
   if (!serviceToken && existsSync('/var/lib/openrind-shell/runtime/browser.env')) {
     try {
       const content = readFileSync('/var/lib/openrind-shell/runtime/browser.env', 'utf8');

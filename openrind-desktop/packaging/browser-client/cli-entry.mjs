@@ -46,7 +46,12 @@ function formatSnapshotNodes(nodes, indent = 0) {
     if (node.kind === 'element') {
       const parts = [node.role || 'element'];
       if (node.name) parts.push(`"${node.name}"`);
-      if (node.handle) parts.push(`[ref: ${node.handle}]`);
+      const ref = node.ref || node.handle;
+      if (ref) parts.push(`[ref: ${ref}]`);
+      if (node.bounds) parts.push(`(bounds: x=${node.bounds.x}, y=${node.bounds.y}, w=${node.bounds.width}, h=${node.bounds.height})`);
+      if (node.center) parts.push(`[center: (${node.center[0]}, ${node.center[1]})]`);
+      if (node.hitTestable) parts.push('[hit-testable]');
+      if (node.inViewport) parts.push('[in-viewport]');
       if (node.checked) parts.push('(checked)');
       if (node.disabled) parts.push('(disabled)');
       lines.push(`${pad}- ${parts.join(' ')}`);
@@ -232,17 +237,25 @@ Usage:
           });
           const retryStruct = retryRes.structuredContent || JSON.parse(retryRes.content?.[0]?.text || '{}');
           const retryData = retryStruct.data || retryStruct;
-          const textOutput = formatSnapshotNodes(retryData.nodes || []);
-          console.log(textOutput || 'Empty page snapshot');
+          if (retryData.summary) {
+            console.log(retryData.summary);
+          } else {
+            const textOutput = formatSnapshotNodes(retryData.nodes || []);
+            console.log(textOutput || 'Empty page snapshot');
+          }
           process.exit(0);
         }
         console.error('Snapshot failed:', structured.message || structured.code);
         process.exit(1);
       }
       const data = structured.data || structured;
-      const nodes = data.nodes || [];
-      const textOutput = formatSnapshotNodes(nodes);
-      console.log(textOutput || 'Empty page snapshot');
+      if (data.summary) {
+        console.log(data.summary);
+      } else {
+        const nodes = data.nodes || [];
+        const textOutput = formatSnapshotNodes(nodes);
+        console.log(textOutput || 'Empty page snapshot');
+      }
     } else if (cmd === 'click') {
       const ref = process.argv[shift];
       if (!ref) { console.error('Usage: browser click <ref>'); process.exit(1); }

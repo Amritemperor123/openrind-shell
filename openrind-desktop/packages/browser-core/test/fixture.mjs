@@ -1,5 +1,5 @@
 // Test-only deterministic provider. Never exported by browser-providers.
-export function fixtureProvider({ act, create, close, profile = 'ephemeral' } = {}) {
+export function fixtureProvider({ act, create, close, profile = 'ephemeral', snapshotNodes } = {}) {
   const events = [], resources = new Map(); let next = 0;
   const capabilities = { protocol: 1, provider: 'local-chromium', driver: 'playwright', browserVersion: 'TEST-ONLY',
     navigation: true, semanticSnapshot: true, elementActions: true, crossOriginFrames: false,
@@ -23,7 +23,7 @@ export function fixtureProvider({ act, create, close, profile = 'ephemeral' } = 
           return { pageId: id,
             async navigate(url) { events.push('navigate'); record.url = url.href; record.documentGeneration++; return { url: record.url, documentGeneration: record.documentGeneration }; },
             async snapshot() { events.push('snapshot'); return { documentGeneration: record.documentGeneration,
-              nodes: [{ kind: 'element', frameId: 'frame_fixture', role: 'button', name: 'Submit', handle: { fixtureNode: 1 } },
+              nodes: snapshotNodes || [{ kind: 'element', frameId: 'frame_fixture', role: 'button', name: 'Submit', handle: { fixtureNode: 1 } },
                 { kind: 'element', frameId: 'frame_fixture', role: 'textbox', name: 'private value', text: 'secret fixture text', sensitive: true, handle: 2 }] }; },
             async act(action, ctx) { events.push(action.kind); await act?.(action, ctx); },
             async close() { pages.delete(id); },
