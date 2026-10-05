@@ -171,6 +171,27 @@ Usage:
         },
       });
       const structured = res.structuredContent || JSON.parse(res.content?.[0]?.text || '{}');
+      if (structured.ok === false) {
+        // Auto recover on session expiration or loss
+        const newOpId = `op_${randomBytes(8).toString('hex')}`;
+        const startRes = await client.callTool({
+          name: 'browser_start',
+          arguments: { provider: session.provider || 'local-chromium', operationId: newOpId, url },
+        });
+        const startStruct = startRes.structuredContent || JSON.parse(startRes.content?.[0]?.text || '{}');
+        const startData = startStruct.data || startStruct;
+        if (startStruct.ok !== false) {
+          saveSession({
+            sessionId: startData.sessionId,
+            sessionEpoch: startData.sessionEpoch || 1,
+            pageId: startData.pageId || startData.pages?.[0]?.pageId,
+            provider: session.provider || 'local-chromium',
+            url,
+          });
+          console.log(`Recovered session and navigated to ${url}`);
+          process.exit(0);
+        }
+      }
       if (structured.sessionEpoch) session.sessionEpoch = structured.sessionEpoch;
       session.url = url;
       saveSession(session);
@@ -188,6 +209,33 @@ Usage:
       });
       const structured = res.structuredContent || JSON.parse(res.content?.[0]?.text || '{}');
       if (structured.ok === false) {
+        // Auto recover on session expiration or loss
+        const newOpId = `op_${randomBytes(8).toString('hex')}`;
+        const startRes = await client.callTool({
+          name: 'browser_start',
+          arguments: { provider: session.provider || 'local-chromium', operationId: newOpId, ...(session.url && session.url !== 'about:blank' ? { url: session.url } : {}) },
+        });
+        const startStruct = startRes.structuredContent || JSON.parse(startRes.content?.[0]?.text || '{}');
+        const startData = startStruct.data || startStruct;
+        if (startStruct.ok !== false) {
+          const newSession = {
+            sessionId: startData.sessionId,
+            sessionEpoch: startData.sessionEpoch || 1,
+            pageId: startData.pageId || startData.pages?.[0]?.pageId,
+            provider: session.provider || 'local-chromium',
+            url: session.url,
+          };
+          saveSession(newSession);
+          const retryRes = await client.callTool({
+            name: 'browser_snapshot',
+            arguments: { sessionId: newSession.sessionId, sessionEpoch: newSession.sessionEpoch, pageId: newSession.pageId },
+          });
+          const retryStruct = retryRes.structuredContent || JSON.parse(retryRes.content?.[0]?.text || '{}');
+          const retryData = retryStruct.data || retryStruct;
+          const textOutput = formatSnapshotNodes(retryData.nodes || []);
+          console.log(textOutput || 'Empty page snapshot');
+          process.exit(0);
+        }
         console.error('Snapshot failed:', structured.message || structured.code);
         process.exit(1);
       }
