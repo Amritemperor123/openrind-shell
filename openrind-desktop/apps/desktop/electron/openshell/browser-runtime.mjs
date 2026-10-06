@@ -31,6 +31,27 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
 
   // Clean up any stale browser edge containers holding the port from a previous run
   await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c', 'docker ps -q --filter name=openrind-browser- | xargs -r docker rm -f'], { timeout: 15_000 }).catch(() => {});
+
+  // Verify that the required image exists locally in Docker; if missing or untagged, resolve from existing container or dangling image
+  const imgCheck = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'image', 'inspect', image, '--format', '{{.Id}}'], { timeout: 10_000 }).catch(() => ({ exitCode: 1 }));
+  if (imgCheck.exitCode !== 0) {
+    console.warn(`[browser-runtime] Image ${image} not found locally in Docker. Checking for fallback or untagged sandbox image...`);
+    const containerImg = await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c',
+      `docker ps -a --filter "label=openshell.ai/managed-by=openshell" --format "{{.Image}}" | head -n 1`], { timeout: 10_000 }).catch(() => null);
+    const fallbackImage = containerImg?.stdout?.trim();
+    if (fallbackImage && fallbackImage !== image) {
+      console.log(`[browser-runtime] Tagging sandbox image ${fallbackImage} as ${image}...`);
+      await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'tag', fallbackImage, image], { timeout: 15_000 }).catch(() => {});
+    } else {
+      const untagged = await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c',
+        `docker images --filter "dangling=true" -q | head -n 1`], { timeout: 10_000 }).catch(() => null);
+      const untaggedId = untagged?.stdout?.trim();
+      if (untaggedId) {
+        console.log(`[browser-runtime] Tagging untagged image ${untaggedId} as ${image}...`);
+        await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'tag', untaggedId, image], { timeout: 15_000 }).catch(() => {});
+      }
+    }
+  }
   // Do not inherit Node injection settings, model credentials or database URLs.
   const env = { OPENRIND_ENABLE_LOCAL_PROVIDER: '1' };
   for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'PATH', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'OPENRIND_ENABLE_LOCAL_PROVIDER']) if (process.env[key]) env[key] = process.env[key];
@@ -71,23 +92,36 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
     return closing;
   };
   let diagnostics = '';
-  const failed = () => {
+  let workerDiagnostics = '';
+  worker.stderr.on('data', chunk => { workerDiagnostics += chunk.toString(); });
+  const failed = (reason) => {
     const wasReady = ready;
-    if (diagnostics.trim()) console.error('startBrowserRuntime edge diagnostics:', diagnostics);
+    const errDetail = [
+      diagnostics.trim() ? `edge: ${diagnostics.trim()}` : null,
+      workerDiagnostics.trim() ? `worker: ${workerDiagnostics.trim()}` : null,
+      reason ? `reason: ${reason}` : null,
+    ].filter(Boolean).join('; ');
+    if (errDetail) console.error('[browser-runtime] Startup failure:', errDetail);
+    startupReject?.(new Error(`Browser runtime startup failed: ${errDetail || 'process exited'}`));
     void close().catch(() => {});
     if (wasReady) { try { onDisconnect(); } catch { /* Cleanup must continue. */ } }
   };
-  worker.once('error', failed); worker.once('exit', failed);
+  worker.once('error', (err) => failed(err));
+  worker.once('exit', (code, signal) => failed(`worker exited with code ${code}, signal ${signal}`));
   worker.stdin.on('error', failed);
-  // Diagnostics are drained, never relayed as potentially sensitive raw output.
-  worker.stderr.resume();
   let startupTimer;
   try {
     const started = new Promise((resolve, reject) => {
       startupReject = reject;
       let workerReady = false, edgeReady = false;
       const finish = () => { if (workerReady && edgeReady) resolve(); };
-      startupTimer = setTimeout(() => reject(new Error('Browser runtime startup timed out')), 15_000);
+      startupTimer = setTimeout(() => {
+        const errDetail = [
+          diagnostics.trim() ? `edge: ${diagnostics.trim()}` : null,
+          workerDiagnostics.trim() ? `worker: ${workerDiagnostics.trim()}` : null,
+        ].filter(Boolean).join('; ');
+        reject(new Error(`Browser runtime startup timed out after 60s (${errDetail || 'no output from edge container'})`));
+      }, 60_000);
       worker.on('message', message => {
         if (message?.type === 'ready' && message.protocol === 1) { workerReady = true; finish(); return; }
         if (message?.type !== 'result' || typeof message.id !== 'string') return failed();

@@ -766,6 +766,7 @@ function openOpenrindShellPtySession(opts) {
     extraEnv,
     agentSessionId,
     profile,
+    workspaceId,
     haloopCapture,
     haloopContextId,
     haloopSessionAssertion,
@@ -822,20 +823,24 @@ function openOpenrindShellPtySession(opts) {
         return openrindPty.openSession({ sandboxName, cols, rows, extraEnv, agentSessionId, haloopContextId });
       }
       let browserLease;
+      let lastBrowserError = null;
       if (prepareBrowserLease) {
         browserLease = await prepareBrowserLease();
       } else if (profile === 'openrind-shell-claude' || profile === 'openrind-shell-openhands' || profile === 'openrind-shell-openhands-script' || profile === 'openrind-shell-openclaw') {
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile });
+            browserLease = await browserController().prepare({ sandboxName, conversationId: haloopContextId, profile, workspaceId });
             if (browserLease?.token && browserLease?.serviceToken) break;
           } catch (error) {
-            console.warn(`Browser runtime setup attempt ${attempt} failed:`, error);
+            lastBrowserError = error;
+            console.warn(`Browser runtime setup attempt ${attempt} for ${sandboxName} failed:`, error?.message || error);
             if (attempt < 3) await new Promise(r => setTimeout(r, 1500));
           }
         }
         if (!browserLease?.token || !browserLease?.serviceToken) {
-          throw new Error(`Failed to initialize browser runtime for sandbox ${sandboxName}: browser credentials could not be secured.`);
+          const detail = lastBrowserError?.message || 'browser credentials could not be secured';
+          console.error(`[browser-launch] Fatal error for ${sandboxName}:`, lastBrowserError);
+          throw new Error(`Failed to initialize browser runtime for sandbox ${sandboxName}: ${detail}`);
         }
       }
 
@@ -2953,6 +2958,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         extraEnv,
         agentSessionId,
         profile,
+        workspaceId,
         haloopCapture: haloop.capture,
         haloopContextId: haloop.haloopContextId,
         haloopSessionAssertion: haloop.sessionAssertion,
@@ -3076,6 +3082,7 @@ async function handleDesktopInvoke(event, command, ...args) {
         extraEnv,
         agentSessionId,
         profile,
+        workspaceId,
         haloopCapture: haloop.capture,
         haloopContextId: haloop.haloopContextId,
         haloopSessionAssertion: haloop.sessionAssertion,

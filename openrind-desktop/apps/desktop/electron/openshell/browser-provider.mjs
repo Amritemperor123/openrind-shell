@@ -52,6 +52,8 @@ export async function attachBrowserProvider({ endpoint, bridgeAddress, bindingId
 
   // A launch binding is unique; create failure must not update someone else's
   // provider or rotate a credential underneath another active sandbox.
+  await runFuseOpenShell(['sandbox', 'provider', 'detach', sandboxName, binding.name], { ensure: false }).catch(() => {});
+  await runFuseOpenShell(['provider', 'delete', binding.name], { ensure: false }).catch(() => {});
   await run(['provider', 'create', '--name', binding.name, '--type', binding.name,
     '--credential', 'OPENRIND_BROWSER_SERVICE_TOKEN'], {
     env: buildFuseWslEnv({ OPENRIND_BROWSER_SERVICE_TOKEN: serviceToken }),
