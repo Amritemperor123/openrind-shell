@@ -97,11 +97,10 @@ export async function validateDestination(value, policy, resolver = lookup) {
   try {
     url = new URL(Url.parse(target));
   } catch {
-    try {
-      url = new URL(target);
-    } catch {
-      throw new BrowserFault('POLICY_DENIED');
-    }
+    throw new BrowserFault('POLICY_DENIED');
+  }
+  if (url.protocol !== 'https:' && target !== 'about:blank') {
+    throw new BrowserFault('POLICY_DENIED');
   }
   const originAllowed = Boolean(policy.allowAnyPublicOrigin) || (policy.origins.length > 0 && policy.origins.includes(url.origin));
   if (!originAllowed || url.hostname.endsWith('.localhost') || url.hostname === 'localhost') throw new BrowserFault('POLICY_DENIED');

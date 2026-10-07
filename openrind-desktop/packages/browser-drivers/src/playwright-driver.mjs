@@ -210,8 +210,12 @@ export class PlaywrightPageDriver {
             const isInteractive = ['button', 'textbox', 'link', 'checkbox', 'radio', 'combobox'].includes(role);
             let handle = undefined;
             if (isInteractive) {
-              handle = 'h_' + (++idCounter);
-              node.setAttribute('data-openrind-handle', handle);
+              if (node.hasAttribute('data-openrind-handle')) {
+                handle = node.getAttribute('data-openrind-handle');
+              } else {
+                handle = 'h_' + (++idCounter);
+                try { node.setAttribute('data-openrind-handle', handle); } catch {}
+              }
             }
 
             count++;

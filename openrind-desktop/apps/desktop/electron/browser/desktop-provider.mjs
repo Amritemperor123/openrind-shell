@@ -108,7 +108,9 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
           // In sidebar mode, human control controls whether native overlay/shield is visible
         },
         async close() {
-          broker.destroyView(viewId);
+          if (ownsView) {
+            broker.destroyView(viewId);
+          }
           activeSessions.delete(handle);
         },
       };

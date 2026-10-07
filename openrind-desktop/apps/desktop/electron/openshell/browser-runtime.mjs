@@ -33,25 +33,10 @@ export async function startBrowserRuntime({ resourceRoot, nodeExecutable, databa
   // Clean up any stale browser edge containers holding the port from a previous run
   await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c', 'docker ps -q --filter name=openrind-browser- | xargs -r docker rm -f'], { timeout: 15_000 }).catch(() => {});
 
-  // Verify that the required image exists locally in Docker; if missing or untagged, resolve from existing container or dangling image
+  // Verify that the required image exists locally in Docker
   const imgCheck = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'image', 'inspect', image, '--format', '{{.Id}}'], { timeout: 10_000 }).catch(() => ({ exitCode: 1 }));
   if (imgCheck.exitCode !== 0) {
-    console.warn(`[browser-runtime] Image ${image} not found locally in Docker. Checking for fallback or untagged sandbox image...`);
-    const containerImg = await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c',
-      `docker ps -a --filter "label=openshell.ai/managed-by=openshell" --format "{{.Image}}" | head -n 1`], { timeout: 10_000 }).catch(() => null);
-    const fallbackImage = containerImg?.stdout?.trim();
-    if (fallbackImage && fallbackImage !== image) {
-      console.log(`[browser-runtime] Tagging sandbox image ${fallbackImage} as ${image}...`);
-      await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'tag', fallbackImage, image], { timeout: 15_000 }).catch(() => {});
-    } else {
-      const untagged = await wslRun(['-d', DISTRO_NAME, '--', 'sh', '-c',
-        `docker images --filter "dangling=true" -q | head -n 1`], { timeout: 10_000 }).catch(() => null);
-      const untaggedId = untagged?.stdout?.trim();
-      if (untaggedId) {
-        console.log(`[browser-runtime] Tagging untagged image ${untaggedId} as ${image}...`);
-        await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'tag', untaggedId, image], { timeout: 15_000 }).catch(() => {});
-      }
-    }
+    throw new Error(`The required browser edge image ${image} is not available in Docker. Build or pull ${image}, then retry.`);
   }
   // Do not inherit Node injection settings, model credentials or database URLs.
   const env = { OPENRIND_ENABLE_LOCAL_PROVIDER: '1' };

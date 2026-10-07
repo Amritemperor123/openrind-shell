@@ -182,9 +182,7 @@ export function BrowserPanel({
               fontSize: '11px',
             }}
           >
-            <option value="local-chromium">Local Chromium</option>
             <option value="desktop-webview">Desktop Webview</option>
-            <option value="browserbase">Cloud (Browserbase)</option>
           </select>
         </div>
 

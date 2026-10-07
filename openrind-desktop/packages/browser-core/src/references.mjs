@@ -2,21 +2,35 @@ import { BrowserFault, LIMITS } from '@openrind/browser-contract';
 import { newId } from './security.mjs';
 
 export class References {
-  constructor({ clock = Date.now } = {}) { this.clock = clock; this.refs = new Map(); }
-  invalidate(sessionId, pageId) {
-    for (const [ref, record] of this.refs) if (record.sessionId === sessionId && (!pageId || record.pageId === pageId)) this.refs.delete(ref);
+  constructor({ clock = Date.now } = {}) {
+    this.clock = clock;
+    // Namespaced reference map: sessionId -> (pageId -> Map(ref -> record))
+    this.refs = new Map();
   }
+
+  invalidate(sessionId, pageId) {
+    if (!sessionId) return;
+    if (pageId) {
+      this.refs.get(sessionId)?.delete(pageId);
+    } else {
+      this.refs.delete(sessionId);
+    }
+  }
+
   snapshot(raw, context, options) {
     if (!Number.isSafeInteger(raw.documentGeneration) || raw.documentGeneration < 1 || !Array.isArray(raw.nodes)) throw new BrowserFault('BACKEND_UNAVAILABLE');
-    // Only purge records from older document generations for this page;
-    // preserve references from the current document generation.
-    for (const [ref, record] of this.refs) {
-      if (record.sessionId === context.sessionId && (!context.pageId || record.pageId === context.pageId)) {
-        if (record.generation !== raw.documentGeneration) {
-          this.refs.delete(ref);
-        }
-      }
+    
+    // Invalidate old references for this session and page before issuing new ones
+    this.invalidate(context.sessionId, context.pageId);
+
+    let sessionMap = this.refs.get(context.sessionId);
+    if (!sessionMap) {
+      sessionMap = new Map();
+      this.refs.set(context.sessionId, sessionMap);
     }
+    const pageRefs = new Map();
+    sessionMap.set(context.pageId, pageRefs);
+
     let remaining = options.maxNodes, bytes = options.maxTextBytes, truncated = false;
     const text = value => {
       if (typeof value !== 'string') return undefined;
@@ -49,25 +63,14 @@ export class References {
           safe.center = [Number(node.center[0]) || 0, Number(node.center[1]) || 0];
         }
         if (node.handle !== undefined && !node.sensitive) {
-          // Re-use existing ref for this handle on the same document generation if possible
-          let ref = null;
-          for (const [r, rec] of this.refs) {
-            if (rec.sessionId === context.sessionId && rec.pageId === context.pageId &&
-                rec.generation === raw.documentGeneration && rec.handle === node.handle) {
-              ref = r;
-              break;
-            }
-          }
-          if (!ref) {
-            counter++;
-            ref = `@e${counter}`;
-          }
+          counter++;
+          const ref = `@e${counter}`;
           safe.ref = ref;
           const rec = { ...context, frameId: node.frameId, generation: raw.documentGeneration,
             handle: node.handle, bounds: safe.bounds, center: safe.center, expiresAt: this.clock() + LIMITS.idleMs };
-          this.refs.set(safe.ref, rec);
+          pageRefs.set(safe.ref, rec);
           if (safe.ref.startsWith('@')) {
-            this.refs.set(safe.ref.slice(1), rec);
+            pageRefs.set(safe.ref.slice(1), rec);
           }
           interactiveControls.push({
             ref: safe.ref,
@@ -141,10 +144,12 @@ export class References {
 
     return { protocol: 1, documentGeneration: raw.documentGeneration, summary: summaryLines.join('\n'), nodes: walkedNodes, truncated };
   }
+
   resolve(ref, context, generation) {
     const rawRef = String(ref);
     const cleanRef = rawRef.startsWith('@') ? rawRef.slice(1) : `@${rawRef}`;
-    const record = this.refs.get(rawRef) || this.refs.get(cleanRef);
+    const pageRefs = this.refs.get(context.sessionId)?.get(context.pageId);
+    const record = pageRefs?.get(rawRef) || pageRefs?.get(cleanRef);
     if (!record || record.expiresAt <= this.clock() || record.generation !== generation ||
       ['owner', 'sessionId', 'sessionEpoch', 'pageId'].some(key => record[key] !== context[key])) throw new BrowserFault('STALE_REF');
     return Object.freeze({ handle: record.handle, frameId: record.frameId, documentGeneration: record.generation, bounds: record.bounds, center: record.center });

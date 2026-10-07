@@ -251,7 +251,15 @@ if (includeFuse) {
 if (includeHaloop) {
   const hasHaloopGateway = (await runWsl(["docker", "image", "inspect", haloopImage], { capture: true })).exitCode === 0;
   const hasHaloopCollector = (await runWsl(["docker", "image", "inspect", haloopCollectorImage], { capture: true })).exitCode === 0;
-  if (hasHaloopGateway && hasHaloopCollector) {
+  if (!hasHaloopGateway || !hasHaloopCollector) {
+    if (verifyOnly || productionHaloop) {
+      fail("Required local Haloop images are missing; cannot verify runtime images.");
+    } else {
+      console.log(
+        `[runtime-images] local Haloop images not present; skipping local Haloop contract verification.`,
+      );
+    }
+  } else {
     const gateway = await verifyImage(
       haloopImage,
       "com.openrind.desktop.haloop-contract",
@@ -264,15 +272,16 @@ if (includeHaloop) {
       HALOOP_COLLECTOR_CONTRACT,
       true,
     );
+    if (gateway.version !== collector.version) {
+      fail(
+        `The Haloop gateway and collector versions do not match (${gateway.version} versus ${collector.version}).`,
+      );
+    }
     if (productionHaloop && gateway.version !== HALOOP_VERSION) {
       fail(
         `Pinned production tags require Haloop version ${HALOOP_VERSION}; found ${gateway.version}.`,
       );
     }
-  } else {
-    console.log(
-      `[runtime-images] local Haloop images not present; skipping local Haloop contract verification.`,
-    );
   }
 }
 

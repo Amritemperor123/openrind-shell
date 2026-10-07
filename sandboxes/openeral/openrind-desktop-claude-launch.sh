@@ -146,7 +146,10 @@ else
   # every new or resumed Claude process. Failure is fatal: direct inference is
   # not a supported recovery path in this image contract.
   export OPENRIND_SHELL_CLAUDE_HOME="${OPENRIND_SHELL_CLAUDE_HOME:-/sandbox/claude-home}"
-  node /opt/openrind-shell/configure-haloop.mjs >/dev/null 2>&1 || true
+  if ! node /opt/openrind-shell/configure-haloop.mjs >/dev/null; then
+    echo "openrind-shell: configure-haloop failed; fatal" >&2
+    exit 1
+  fi
   if [ -f "$RUNTIME_DIR/anthropic-base-url" ]; then
     export ANTHROPIC_BASE_URL="$(cat "$RUNTIME_DIR/anthropic-base-url" 2>/dev/null | tr -d '\r\n ')"
   fi

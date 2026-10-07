@@ -191,6 +191,10 @@ export function SessionPage(props: SessionPageProps) {
   });
 
   const browser = useBrowserStore(props.selectedSessionId || "default_session");
+
+  useEffect(() => {
+    browser.setVisible(rightSidebarExpanded);
+  }, [rightSidebarExpanded, browser.setVisible]);
   // Default to sessions when the route does not drive the tab.
   const sidebarTab: SidebarTab = props.sidebarTab ?? "sessions";
   useReactRenderWatchdog("SessionPage", {

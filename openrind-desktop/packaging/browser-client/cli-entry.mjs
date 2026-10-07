@@ -116,11 +116,13 @@ async function main() {
 Openrind Browser CLI
 
 Usage:
-  browser start [url] [provider]   Start browser (default provider: desktop-webview)
+  browser start [url]              Start browser session (desktop-webview)
   browser navigate <url>           Navigate to URL
-  browser snapshot                 Print semantic DOM tree with element refs
-  browser click <ref>              Click an element (e.g. h_1)
+  browser snapshot                 Print interactive controls list with element refs and coordinates
+  browser click <ref>              Click an element (e.g. @e1 or e1)
   browser fill <ref> <text>        Type text into input
+  browser press <key>              Press key (e.g. Enter)
+  browser scroll [direction] [px]  Scroll page (e.g. down 800)
   browser close                    Close the browser session
   browser status                   Show current session status
     `);
@@ -136,7 +138,11 @@ Usage:
       if (rawUrl && rawUrl !== 'about:blank') {
         url = rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl : `https://${rawUrl}`;
       }
-      const provider = process.argv[shift + 1] || 'desktop-webview';
+      let provider = process.argv[shift + 1] || 'desktop-webview';
+      if (provider === 'local-chromium') {
+        console.error('Local Chromium is unavailable in this sandbox environment. Using desktop-webview.');
+        provider = 'desktop-webview';
+      }
       const operationId = `op_${randomBytes(8).toString('hex')}`;
       const startArgs = { provider, operationId };
       if (url) startArgs.url = url;

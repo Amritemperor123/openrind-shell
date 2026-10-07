@@ -108,18 +108,19 @@ fi
 
 PROXY_PID=""
 if [ -f /opt/openrind-shell/haloop-agent-proxy.mjs ]; then
-  pkill -f haloop-agent-proxy.mjs 2>/dev/null || true
-  export HALOOP_GATEWAY_URL="${HALOOP_GATEWAY_URL:-${HALOOP_UPSTREAM_URL:-http://136.112.93.84:8787}}"
-  export HALOOP_UPSTREAM_URL="$HALOOP_GATEWAY_URL"
-  export NODE_USE_ENV_PROXY=1
-  /usr/bin/node /opt/openrind-shell/haloop-agent-proxy.mjs &
-  PROXY_PID=$!
-  for _i in $(seq 1 30); do
-    if curl -s -o /dev/null http://127.0.0.1:8785/healthz 2>/dev/null; then
-      break
-    fi
-    sleep 0.05
-  done
+  if ! curl -s -o /dev/null http://127.0.0.1:8785/healthz 2>/dev/null; then
+    export HALOOP_GATEWAY_URL="${HALOOP_GATEWAY_URL:-${HALOOP_UPSTREAM_URL:-http://host.openshell.internal:8787}}"
+    export HALOOP_UPSTREAM_URL="$HALOOP_GATEWAY_URL"
+    export NODE_USE_ENV_PROXY=1
+    /usr/bin/node /opt/openrind-shell/haloop-agent-proxy.mjs &
+    PROXY_PID=$!
+    for _i in $(seq 1 30); do
+      if curl -s -o /dev/null http://127.0.0.1:8785/healthz 2>/dev/null; then
+        break
+      fi
+      sleep 0.05
+    done
+  fi
   export ANTHROPIC_BASE_URL="http://127.0.0.1:8785"
   mkdir -p /home/agent/.openrind-shell
   printf 'export ANTHROPIC_BASE_URL="http://127.0.0.1:8785"\n' > /home/agent/.openrind-shell/env.sh

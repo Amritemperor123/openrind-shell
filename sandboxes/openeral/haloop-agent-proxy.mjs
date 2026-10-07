@@ -12,15 +12,19 @@ process.on('unhandledRejection', err => {
   console.error('PROXY UNHANDLED REJECTION:', err);
 });
 
-let targetBase = process.env.HALOOP_UPSTREAM_URL || process.env.HALOOP_GATEWAY_URL || 'http://136.112.93.84:8787';
-if (targetBase.includes(':8785') || targetBase.includes('127.0.0.1:8785')) {
-  targetBase = process.env.HALOOP_UPSTREAM_URL || process.env.HALOOP_GATEWAY_URL || 'http://136.112.93.84:8787';
-  if (targetBase.includes(':8785') || targetBase.includes('127.0.0.1:8785')) {
-    targetBase = 'http://136.112.93.84:8787';
-  }
+let targetBase = process.env.HALOOP_UPSTREAM_URL || process.env.HALOOP_GATEWAY_URL || '';
+if (!targetBase) {
+  targetBase = 'http://host.openshell.internal:8787';
 }
 const targetUrl = new URL(targetBase);
+const isLoopbackOrInternal = targetUrl.hostname === '127.0.0.1' ||
+  targetUrl.hostname === 'localhost' ||
+  targetUrl.hostname === 'host.openshell.internal';
 const isHttps = targetUrl.protocol === 'https:';
+const isSecureUpstream = isHttps || isLoopbackOrInternal;
+if (!isSecureUpstream && targetUrl.protocol === 'http:') {
+  console.warn(`[haloop-proxy] Plaintext remote upstream rejected: ${targetBase}`);
+}
 const client = isHttps ? https : http;
 
 const proxyEnv = process.env.HTTP_PROXY || process.env.http_proxy || process.env.ALL_PROXY || process.env.all_proxy;
@@ -261,7 +265,7 @@ const server = http.createServer((req, res) => {
         'content-type': 'application/json',
         'content-length': Buffer.byteLength(openAiPayload),
         'x-w8-haloop-provider': 'openrouter',
-        ...(adminToken ? { 'x-w8-haloop-admin-token': adminToken } : {}),
+        ...(adminToken && isSecureUpstream ? { 'x-w8-haloop-admin-token': adminToken } : {}),
         'x-w8-haloop-metadata': JSON.stringify({ project: projectName }),
         'x-w8-haloop-config': JSON.stringify({
           input_guardrails: [{ 'halo.mark': { collectorURL: collectorUrl }, async: false, deny: false }],
@@ -599,8 +603,16 @@ const server = http.createServer((req, res) => {
     const collectorUrl = process.env.HALOOP_COLLECTOR_URL || 'http://136.112.93.84:8788';
     const sessionContext = process.env.OPENRIND_HALOOP_SESSION_CONTEXT || req.headers['x-openrind-haloop-session'] || '';
     const headers = { ...req.headers };
+    delete headers['authorization'];
+    delete headers['x-api-key'];
+    delete headers['host'];
+    for (const k of Object.keys(headers)) {
+      if (k.toLowerCase().startsWith('x-w8-haloop-')) delete headers[k];
+    }
     headers['x-w8-haloop-provider'] = provider;
-    headers['x-w8-haloop-admin-token'] = adminToken;
+    if (adminToken && isSecureUpstream) {
+      headers['x-w8-haloop-admin-token'] = adminToken;
+    }
     headers['x-w8-haloop-metadata'] = JSON.stringify({ project: projectName });
     headers['x-w8-haloop-config'] = JSON.stringify({
       input_guardrails: [{ 'halo.mark': { collectorURL: collectorUrl }, async: false, deny: false }],
@@ -611,7 +623,6 @@ const server = http.createServer((req, res) => {
       headers['x-openrind-haloop-session'] = sessionContext;
     }
 
-    const isSecureUpstream = isHttps || targetUrl.hostname === '127.0.0.1' || targetUrl.hostname === 'localhost' || targetUrl.hostname === 'host.openshell.internal';
     if (defaultKey && isSecureUpstream) {
       headers['authorization'] = defaultKey.startsWith('Bearer ')
         ? defaultKey

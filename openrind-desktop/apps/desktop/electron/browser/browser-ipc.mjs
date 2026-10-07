@@ -12,8 +12,9 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
 
   ipcMain.handle('openrind-desktop:browser:start', async (event, opts = {}) => {
     checkSender(event);
-    const { owner = 'desktop_user', sessionId, conversationId, partition, bounds, allowedOrigins, initialUrl } = opts;
+    const { owner = 'desktop_user', sessionId, conversationId, partition, bounds, allowedOrigins, initialUrl, provider = 'desktop-webview' } = opts;
     if (!sessionId) throw new BrowserFault('INVALID_ARGUMENT');
+    if (provider !== 'desktop-webview') throw new BrowserFault('CAPABILITY_UNAVAILABLE');
 
     const view = broker.createView({
       owner,

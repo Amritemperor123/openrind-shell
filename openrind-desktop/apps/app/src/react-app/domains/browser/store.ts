@@ -78,14 +78,14 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
     setState(s => ({ ...defaultState, isOpen: false }));
   }, [electron]);
 
-  const navigate = useCallback(async (url: string) => {
+  const navigate = useCallback(async (url: string, forPageId?: string) => {
     if (!url) return;
     let target = url.trim();
     if (!target.startsWith('https://') && !target.startsWith('http://') && target !== 'about:blank') {
       target = `https://${target}`;
     }
     try {
-      const activeId = stateRef.current.activeTabId || stateRef.current.tabs[0]?.pageId;
+      const activeId = forPageId || stateRef.current.activeTabId || stateRef.current.tabs[0]?.pageId;
       const cleanTitle = target === 'about:blank' ? 'New Tab' : target.replace(/^https?:\/\//, '');
       setState(s => ({
         ...s,
@@ -225,7 +225,7 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
       currentUrl: url,
     }));
     if (stateRef.current.viewId && electron?.browser?.navigate) {
-      await navigate(url);
+      await navigate(url, newPageId);
     } else {
       await startSession(stateRef.current.provider, url);
     }
@@ -256,7 +256,7 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
       };
     });
     if (targetUrlToNav !== null && stateRef.current.viewId && electron?.browser?.navigate) {
-      void navigate(targetUrlToNav);
+      void navigate(targetUrlToNav, nextActive);
     }
   }, [electron, navigate]);
 

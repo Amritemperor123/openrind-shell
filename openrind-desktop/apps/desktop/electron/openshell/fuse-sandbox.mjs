@@ -118,12 +118,17 @@ function normalizeProviderRows(stdout) {
     .filter((row) => row.name);
 }
 
+function resolveHaloopProvider(env = process.env) {
+  const openrouterKey = (env.OPENROUTER_API_KEY || "").trim();
+  return (env.W8_HALOOP_PROVIDER || env.OPENRIND_GATEWAY_PROVIDER || (openrouterKey ? "openrouter" : "anthropic")).trim();
+}
+
 async function ensureHaloopProvider(providerName, clientToken, onProgress) {
   // Claude, OpenClaw, and OpenHands look for ANTHROPIC_API_KEY, OPENAI_API_KEY,
   // or LLM_API_KEY. The value supplied here is resolved at request time by OpenShell.
   const openrouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
   const adminToken = (process.env.ADMIN_TOKEN || process.env.W8_BYOH_ADMIN_TOKEN || "").trim();
-  const haloopProvider = (process.env.W8_HALOOP_PROVIDER || process.env.OPENRIND_GATEWAY_PROVIDER || (openrouterKey ? "openrouter" : "anthropic")).trim();
+  const haloopProvider = resolveHaloopProvider(process.env);
   const env = buildFuseWslEnv({
     ANTHROPIC_API_KEY: clientToken,
     OPENAI_API_KEY: clientToken,
@@ -779,7 +784,7 @@ async function provisionOpenrindShellSandbox(options) {
       throw new Error(`Invalid Haloop gateway URL: ${haloop.endpoint}`);
     }
     sandboxArgs.push("--env", `HALOOP_GATEWAY_URL=${haloop.endpoint}`);
-    const activeProvider = (process.env.W8_HALOOP_PROVIDER || process.env.OPENRIND_GATEWAY_PROVIDER || "openrouter").trim();
+    const activeProvider = resolveHaloopProvider(process.env);
     sandboxArgs.push("--env", `W8_HALOOP_PROVIDER=${activeProvider}`);
     const activeOpenrouterModel = (process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || "").trim();
     if (activeOpenrouterModel) {

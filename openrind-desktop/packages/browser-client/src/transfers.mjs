@@ -28,16 +28,28 @@ export function assertPathBeneath(workspaceRoot, relativePath) {
 }
 
 export async function verifyNoSymlinkEscape(workspaceRoot, targetPath) {
-  try {
-    const realRoot = await realpath(workspaceRoot);
-    const realTarget = await realpath(targetPath);
-    const prefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep;
-    if (!realTarget.startsWith(prefix) && realTarget !== realRoot) {
-      throw new BrowserFault('POLICY_DENIED');
+  const realRoot = await realpath(workspaceRoot);
+  const prefix = realRoot.endsWith(sep) ? realRoot : realRoot + sep;
+
+  let current = targetPath;
+  while (true) {
+    try {
+      const real = await realpath(current);
+      if (!real.startsWith(prefix) && real !== realRoot) {
+        throw new BrowserFault('POLICY_DENIED');
+      }
+      break;
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        const parent = dirname(current);
+        if (parent === current) {
+          throw new BrowserFault('POLICY_DENIED');
+        }
+        current = parent;
+        continue;
+      }
+      throw error;
     }
-  } catch (error) {
-    if (error?.code === 'ENOENT') return; // New file destination
-    throw error;
   }
 }
 
@@ -118,6 +130,7 @@ export function createLocalTransfers({ workspaceRoot, artifacts, owner }) {
       }
 
       await mkdir(targetDir, { recursive: true });
+      await verifyNoSymlinkEscape(workspaceRoot, targetDir);
 
       // Atomic save via temp file in the same directory
       const tempPath = join(targetDir, `.tmp_art_${randomBytes(8).toString('hex')}`);
