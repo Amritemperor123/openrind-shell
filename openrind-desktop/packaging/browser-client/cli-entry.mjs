@@ -39,6 +39,19 @@ async function getClient() {
   return { client, transport, dispatcher };
 }
 
+function checkToolResult(res, actionName) {
+  let structured = res.structuredContent;
+  if (!structured && res.content?.[0]?.text) {
+    try { structured = JSON.parse(res.content[0].text); } catch {}
+  }
+  if (res.isError || structured?.ok === false) {
+    const errorMsg = structured?.message || structured?.code || res.content?.[0]?.text || `${actionName} failed`;
+    console.error(`Error (${actionName}): ${errorMsg}`);
+    process.exit(1);
+  }
+  return structured || {};
+}
+
 function formatSnapshotNodes(nodes, indent = 0) {
   const lines = [];
   const pad = '  '.repeat(indent);
@@ -281,9 +294,10 @@ Usage:
           ref,
         },
       });
+      checkToolResult(res, 'click');
       console.log(`Clicked element [${ref}]`);
     } else if (cmd === 'fill' || cmd === 'type') {
-      const ref = process.argv[shift];
+      let ref = process.argv[shift];
       const text = process.argv.slice(shift + 1).join(' ');
       if (!ref || !text) { console.error('Usage: browser fill <ref> <text>'); process.exit(1); }
       const session = readSession();
@@ -300,6 +314,7 @@ Usage:
           text,
         },
       });
+      checkToolResult(res, 'fill');
       console.log(`Typed into [${ref}]: "${text}"`);
     } else if (cmd === 'press' || cmd === 'key' || cmd === 'submit') {
       let key = process.argv[shift] || 'Enter';
@@ -319,10 +334,11 @@ Usage:
         key,
       };
       if (ref) args.ref = ref;
-      await client.callTool({
+      const res = await client.callTool({
         name: 'browser_press',
         arguments: args,
       });
+      checkToolResult(res, 'press');
       console.log(`Pressed key: ${key}${ref ? ` on [${ref}]` : ''}`);
     } else if (cmd === 'scroll') {
       let direction = process.argv[shift] || 'down';
@@ -331,7 +347,7 @@ Usage:
       const session = readSession();
       if (!session) { console.error('No active browser session.'); process.exit(1); }
       const operationId = `op_${randomBytes(8).toString('hex')}`;
-      await client.callTool({
+      const res = await client.callTool({
         name: 'browser_scroll',
         arguments: {
           sessionId: session.sessionId,
@@ -342,6 +358,7 @@ Usage:
           distance,
         },
       });
+      checkToolResult(res, 'scroll');
       console.log(`Scrolled ${direction} ${distance}px`);
     } else if (cmd === 'screenshot') {
       const session = readSession();

@@ -93,9 +93,35 @@ export async function startStandaloneBrowserServer({
           return;
         }
 
+        const MAX_BYTES = 64 * 1024;
+        let receivedBytes = 0;
         let bodyStr = '';
-        req.on('data', chunk => { bodyStr += chunk; });
+        let aborted = false;
+
+        req.on('data', chunk => {
+          if (aborted) return;
+          receivedBytes += chunk.length;
+          if (receivedBytes > MAX_BYTES) {
+            aborted = true;
+            req.destroy();
+            if (!res.headersSent) {
+              res.writeHead(413, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Payload Too Large' }));
+            }
+            return;
+          }
+          bodyStr += chunk;
+        });
+
+        req.on('error', () => {
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request stream error' }));
+          }
+        });
+
         req.on('end', () => {
+          if (aborted || res.headersSent) return;
           try {
             const body = JSON.parse(bodyStr || '{}');
             const grant = service.core.grants.issue(body.scope, body.policy);

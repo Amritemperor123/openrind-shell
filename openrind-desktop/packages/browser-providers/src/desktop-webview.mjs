@@ -122,8 +122,7 @@ export function createBridgedDesktopWebviewProvider() {
           return [{ pageId: initialPageId, documentGeneration: currentDocGen, url: typeof currentUrl === 'string' ? currentUrl : (currentUrl?.href || 'about:blank') }];
         },
         async openPage(url, opctx) {
-          if (url) await initialDriver.navigate(url, opctx);
-          return { pageId: initialPageId, documentGeneration: currentDocGen, url: currentUrl };
+          throw new BrowserFault('CAPABILITY_UNAVAILABLE');
         },
         page(id) {
           return getOrCreatePageDriver(id);

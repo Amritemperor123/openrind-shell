@@ -32,8 +32,7 @@ export function browserBinding({ endpoint, bridgeAddress, bindingId }) {
         '/usr/local/bin/fill',
         '/usr/local/bin/press',
         '/usr/local/bin/navigate',
-        '/usr/local/bin/agent-browser',
-        '/usr/bin/curl'
+        '/usr/local/bin/agent-browser'
       ] },
     networkPolicy: { name, endpoints: [route], binaries: [
       { path: '/usr/local/bin/openrind-browser-client' },
@@ -44,8 +43,7 @@ export function browserBinding({ endpoint, bridgeAddress, bindingId }) {
       { path: '/usr/local/bin/fill' },
       { path: '/usr/local/bin/press' },
       { path: '/usr/local/bin/navigate' },
-      { path: '/usr/local/bin/agent-browser' },
-      { path: '/usr/bin/curl' }
+      { path: '/usr/local/bin/agent-browser' }
     ] },
   });
 }

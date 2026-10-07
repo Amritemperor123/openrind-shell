@@ -14,8 +14,26 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
       try {
         const policy = JSON.parse(effective.stdout).policy;
         const entries = Object.values(policy?.network_policies ?? {});
-        if (entries.some(entry => entry.binaries?.some(b => b.path === '/usr/local/bin/openrind-browser-client') &&
-            entry.endpoints?.some(endpoint => endpoint.host === route?.host && endpoint.port === route?.port))) {
+        const isMatch = entries.some(entry =>
+          entry.binaries?.some(b => b.path === '/usr/local/bin/openrind-browser-client') &&
+          entry.endpoints?.some(endpoint => {
+            if (endpoint.host !== route?.host || endpoint.port !== route?.port) return false;
+            if (endpoint.protocol && route?.protocol && endpoint.protocol !== route.protocol) return false;
+            if (endpoint.tls && route?.tls && endpoint.tls !== route.tls) return false;
+            if (endpoint.enforcement && route?.enforcement && endpoint.enforcement !== route.enforcement) return false;
+            if (route?.rules?.length) {
+              const allowedMethods = new Set(
+                (endpoint.rules || []).map(r => r.allow?.method || r.method).filter(Boolean)
+              );
+              for (const rule of route.rules) {
+                const reqMethod = rule.allow?.method || rule.method;
+                if (reqMethod && allowedMethods.size && !allowedMethods.has(reqMethod)) return false;
+              }
+            }
+            return true;
+          })
+        );
+        if (isMatch) {
           policyEffective = true;
           break;
         }
@@ -51,12 +69,11 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
   if (serviceToken) {
     const tokenRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', containerId,
       'sh', '-c', `
-        mkdir -p /etc/openrind-browser /var/lib/openrind-shell/runtime
+        mkdir -p /etc/openrind-browser
         cat > /etc/openrind-browser/service-token
-        chmod 644 /etc/openrind-browser/service-token
-        cat /etc/openrind-browser/service-token > /var/lib/openrind-shell/runtime/browser-token
-        chmod 644 /var/lib/openrind-shell/runtime/browser-token
-        chown -R sandbox:sandbox /var/lib/openrind-shell/runtime
+        chown root:root /etc/openrind-browser/service-token
+        chmod 0600 /etc/openrind-browser/service-token
+        rm -f /var/lib/openrind-shell/runtime/browser-token
       `], {
       stdin: serviceToken.trim(),
       timeout: 15_000,

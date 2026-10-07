@@ -684,14 +684,13 @@ async function writeOpenrindShellSessionMarker(
   haloopSessionAssertion,
   browserGrant,
   browserServiceToken,
-  apiKey,
 ) {
   const value = openrindShell.resolveAgentSessionValue(
     profile,
     agentSessionId,
     haloopSessionAssertion,
   );
-  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken, apiKey);
+  await openrindShell.writeCurrentSessionMarker(sandboxName, value, browserGrant, browserServiceToken);
 }
 
 // Agent sessions are CONCURRENT: a sandbox hosts one live PTY per Openrind Desktop
@@ -848,9 +847,6 @@ function openOpenrindShellPtySession(opts) {
       let ptyExited = false;
       let opened;
       try {
-        let upstreamKey = "";
-      try { upstreamKey = await openrindShell.requiredHaloopUpstreamApiKey(); } catch {}
-      upstreamKey = (upstreamKey || process.env.ANTHROPIC_API_KEY || "").trim();
       await writeOpenrindShellSessionMarker(
         sandboxName,
         profile,
@@ -858,7 +854,6 @@ function openOpenrindShellPtySession(opts) {
         haloopSessionAssertion,
         browserLease?.token,
         browserLease?.serviceToken,
-        upstreamKey,
       );
       // Explicit verification check: confirm credentials exist and are valid inside container
       const credCheck = await openrindShell.verifySandboxBrowserCredentials(sandboxName);

@@ -211,6 +211,15 @@ test('unapproved or private destinations never reach a provider', async t => {
   assert.equal((await core.call(grant.token, 'browser_navigate', { ...page, operationId: 'op_private', url: 'https://example.com' })).code, 'POLICY_DENIED');
   assert(!provider.events.includes('navigate'));
 });
+test('dotted hostnames resolving to private or loopback addresses are denied with allowAnyPublicOrigin: true', async t => {
+  const { core, page } = await setup(t, { policy: { allowAnyPublicOrigin: true, origins: [] } });
+  const grant = core.grants.issue(scope, { ...policy, allowAnyPublicOrigin: true, origins: [] });
+  for (const privateIp of ['10.0.0.1', '127.0.0.1', '192.168.1.1']) {
+    core.resolver = async () => [{ address: privateIp }];
+    const res = await core.call(grant.token, 'browser_navigate', { ...page, operationId: `op_p_${privateIp.replaceAll('.', '_')}`, url: 'https://internal.corp.com' });
+    assert.equal(res.code, 'POLICY_DENIED');
+  }
+});
 test('core contains no Electron/provider SDK imports or driver code execution escape hatch', async () => {
   for (const name of await readdir(new URL('../src/', import.meta.url))) {
     const text = await readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');

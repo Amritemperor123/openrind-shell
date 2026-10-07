@@ -834,8 +834,14 @@ async function requireHaloopImages(run) {
     }
     return { gateway, collector, remote: false };
   } catch (error) {
+    const isRemoteConfigured = process.env.OPENRIND_HALOOP_REMOTE === "1" || process.env.OPENRIND_ALLOW_REMOTE_HALOOP === "1";
+    if (!isRemoteConfigured) {
+      throw new Error(
+        `Haloop local image verification failed: ${error.message}. Build or make local images available, or explicitly set OPENRIND_ALLOW_REMOTE_HALOOP=1 to permit remote gateway operation.`,
+      );
+    }
     console.log(
-      `[haloop-runtime] Local Haloop images not available in WSL (${error.message}). Falling back to remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
+      `[haloop-runtime] Local Haloop images not available in WSL (${error.message}). Explicit remote configuration active; routing to remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,
     );
     return {
       gateway: { contract: HALOOP_IMAGE_CONTRACT, version: "remote", imageId: "remote" },
@@ -1777,6 +1783,15 @@ export function createHaloopRuntimeManager({
         .digest("hex");
 
       if (images.remote) {
+        let epUrl;
+        try {
+          epUrl = new URL(HALOOP_SANDBOX_ENDPOINT);
+        } catch {
+          throw new Error(`Invalid remote Haloop endpoint: ${HALOOP_SANDBOX_ENDPOINT}`);
+        }
+        if (epUrl.protocol !== "https:" && epUrl.protocol !== "http:") {
+          throw new Error(`Remote Haloop endpoint must use HTTP or HTTPS protocol: ${HALOOP_SANDBOX_ENDPOINT}`);
+        }
         options.onProgress?.({
           phase: "haloop",
           message: `Routing via remote Haloop gateway at ${HALOOP_SANDBOX_ENDPOINT}.`,

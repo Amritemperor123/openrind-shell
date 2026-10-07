@@ -28,7 +28,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
     if (!record) {
       throw new BrowserFault('SESSION_LOST');
     }
-    if (owner && record.owner !== owner && !(owner === 'desktop_owner' && record.owner === 'desktop_user')) {
+    if (owner && record.owner !== owner) {
       throw new BrowserFault('SESSION_LOST');
     }
     if (record.fenced) {
@@ -124,6 +124,9 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
             mainWindow.webContents.send('openrind-desktop:browser:event', {
               type: 'navigate',
               viewId,
+              conversationId: record.conversationId,
+              sessionId: record.sessionId,
+              owner: record.owner,
               url: currentUrl,
               canGoBack: canBack,
               canGoForward: canForward,
@@ -168,6 +171,8 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
             type: 'start',
             viewId,
             conversationId,
+            sessionId,
+            owner,
             url: 'about:blank',
           });
         } catch {}
@@ -236,6 +241,9 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
               mainWindow.webContents.send('openrind-desktop:browser:event', {
                 type: 'navigate',
                 viewId,
+                conversationId: record.conversationId,
+                sessionId: record.sessionId,
+                owner: record.owner,
                 url: currentUrl,
               });
             } catch {}

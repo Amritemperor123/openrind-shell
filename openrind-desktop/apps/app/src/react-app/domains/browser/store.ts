@@ -39,6 +39,7 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
         const res = await electron.browser.start({
           sessionId: `bs_${Date.now()}`,
           conversationId,
+          provider,
           initialUrl: initialUrl || 'about:blank',
         });
         const initialTab: BrowserTab = {
@@ -165,6 +166,14 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
         window.dispatchEvent(new Event('resize'));
         return;
       }
+      // Ignore events not belonging to this panel's active conversation
+      if (evt.conversationId && evt.conversationId !== conversationId) {
+        return;
+      }
+      // If the panel already has an active viewId, ignore events from a foreign view
+      if (stateRef.current.viewId && evt.viewId && evt.viewId !== stateRef.current.viewId) {
+        return;
+      }
       if (evt.type === 'start' || evt.type === 'navigate') {
         const url = evt.url || 'about:blank';
         const cleanTitle = url === 'about:blank' ? 'New Tab' : url.replace(/^https?:\/\//, '');
@@ -215,20 +224,20 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
       activeTabId: newPageId,
       currentUrl: url,
     }));
-    if (url !== 'about:blank') {
-      if (stateRef.current.viewId && electron?.browser?.navigate) {
-        await navigate(url);
-      } else {
-        await startSession(stateRef.current.provider, url);
-      }
+    if (stateRef.current.viewId && electron?.browser?.navigate) {
+      await navigate(url);
+    } else {
+      await startSession(stateRef.current.provider, url);
     }
   }, [electron, navigate, startSession]);
 
   const closeTab = useCallback((pageId: string) => {
+    let targetUrlToNav: string | null = null;
     setState(s => {
       const remaining = s.tabs.filter(t => t.pageId !== pageId);
       if (remaining.length === 0) {
         const defaultTab: BrowserTab = { pageId: 'bp_main', url: 'about:blank', title: 'New Tab', documentGeneration: 1 };
+        targetUrlToNav = 'about:blank';
         return {
           ...s,
           tabs: [defaultTab],
@@ -238,6 +247,7 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
       }
       const nextActive = s.activeTabId === pageId ? remaining[remaining.length - 1].pageId : s.activeTabId;
       const nextTab = remaining.find(t => t.pageId === nextActive) || remaining[0];
+      targetUrlToNav = nextTab.url;
       return {
         ...s,
         tabs: remaining,
@@ -245,7 +255,10 @@ export function useBrowserStore(conversationId: string, sandboxName?: string) {
         currentUrl: nextTab.url,
       };
     });
-  }, []);
+    if (targetUrlToNav !== null && stateRef.current.viewId && electron?.browser?.navigate) {
+      void navigate(targetUrlToNav);
+    }
+  }, [electron, navigate]);
 
   const selectTab = useCallback(async (pageId: string) => {
     const tab = stateRef.current.tabs.find(t => t.pageId === pageId);

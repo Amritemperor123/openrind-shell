@@ -38,35 +38,22 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
       const owner = ctx?.owner || 'desktop_owner';
       const handle = `dw_${randomBytes(16).toString('hex')}`;
 
-      // Check if an existing active view is already open in the Desktop window
-      let activeViewId = null;
-      let activeDocGen = 1;
-      let activeOwner = owner;
-
+      // Attach only to a view explicitly authorized for the same conversation and owner, or create a separate view
+      let matchingView = null;
       for (const [vId, rec] of broker.views) {
-        if (!rec.wc.isDestroyed() && !rec.fenced) {
-          activeViewId = vId;
-          activeDocGen = rec.documentGeneration;
-          activeOwner = rec.owner;
+        if (!rec.wc.isDestroyed() && !rec.fenced && rec.owner === owner && rec.conversationId === spec.conversationId) {
+          matchingView = rec;
           break;
         }
       }
 
-      let viewId = activeViewId;
-      let documentGeneration = activeDocGen;
-      let effectiveOwner = activeOwner;
-
-      if (!viewId) {
-        const created = broker.createView({
-          owner,
-          sessionId,
-          conversationId: spec.conversationId,
-          allowedOrigins: spec.allowedOrigins || [],
-        });
-        viewId = created.viewId;
-        documentGeneration = created.documentGeneration;
-        effectiveOwner = owner;
-      }
+      const ownsView = !matchingView;
+      const { viewId, documentGeneration } = matchingView || broker.createView({
+        owner,
+        sessionId,
+        conversationId: spec.conversationId,
+        allowedOrigins: spec.allowedOrigins || [],
+      });
 
       const pageId = `bp_${randomBytes(12).toString('hex')}`;
       let currentDocGen = documentGeneration;
@@ -79,26 +66,26 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
         async navigate(url, nctx) {
           if (nctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
           const target = typeof url === 'string' ? url : (url?.href || 'about:blank');
-          const res = await broker.navigate(viewId, effectiveOwner, target);
+          const res = await broker.navigate(viewId, owner, target);
           currentDocGen = res.documentGeneration;
           currentUrl = typeof res?.url === 'string' ? res.url : target;
-          await broker.initDebugger(viewId, effectiveOwner).catch(() => {});
+          await broker.initDebugger(viewId, owner).catch(() => {});
           return res;
         },
         async snapshot(options, sctx) {
           if (sctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.snapshot(viewId, effectiveOwner, options);
+          return broker.snapshot(viewId, owner, options);
         },
         async act(action, actx) {
           if (actx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.act(viewId, effectiveOwner, action);
+          return broker.act(viewId, owner, action);
         },
         async screenshot(options, sctx) {
           if (sctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.screenshot(viewId, effectiveOwner, options);
+          return broker.screenshot(viewId, owner, options);
         },
         async close() {
-          if (!activeViewId) {
+          if (ownsView) {
             broker.destroyView(viewId);
           }
         },
@@ -111,8 +98,7 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
           return [{ pageId, documentGeneration: currentDocGen, url: typeof currentUrl === 'string' ? currentUrl : (currentUrl?.href || 'about:blank') }];
         },
         async openPage(url, opctx) {
-          if (url) await pageDriver.navigate(url, opctx);
-          return { pageId, documentGeneration: currentDocGen, url: currentUrl };
+          throw new BrowserFault('CAPABILITY_UNAVAILABLE');
         },
         page(id) {
           if (id !== pageId) throw new BrowserFault('SESSION_LOST');

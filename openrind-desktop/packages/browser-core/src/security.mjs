@@ -110,15 +110,9 @@ export async function validateDestination(value, policy, resolver = lookup) {
   try {
     addresses = isIP(hostname) ? [{ address: hostname }] : await resolver(hostname, { all: true, verbatim: true });
   } catch {
-    if (policy.allowAnyPublicOrigin && hostname.includes('.') && !isIP(hostname)) {
-      return Object.freeze({ href: url.href, origin: url.origin });
-    }
     throw new BrowserFault('POLICY_DENIED');
   }
   if (!addresses.length || !addresses.every(item => publicAddress(item.address))) {
-    if (policy.allowAnyPublicOrigin && hostname.includes('.') && !isIP(hostname)) {
-      return Object.freeze({ href: url.href, origin: url.origin });
-    }
     throw new BrowserFault('POLICY_DENIED');
   }
   return Object.freeze({ href: url.href, origin: url.origin });

@@ -146,6 +146,7 @@ export function createBrowserbaseProvider(options = {}) {
         capabilities,
         context,
         pages: [{ pageId, page: initialPage }],
+        onDownload: ctx?.onDownload || options?.onDownload,
       });
 
       activeSessions.set(handle, {

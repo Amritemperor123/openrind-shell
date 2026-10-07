@@ -273,8 +273,9 @@ const server = http.createServer((req, res) => {
         forwardHeaders['x-openrind-haloop-session'] = sessionContext;
       }
 
+      const isSecureUpstream = isHttps || targetUrl.hostname === '127.0.0.1' || targetUrl.hostname === 'localhost' || targetUrl.hostname === 'host.openshell.internal';
       const authKey = openRouterKey || defaultKey;
-      if (authKey) {
+      if (authKey && isSecureUpstream) {
         forwardHeaders['authorization'] = authKey.startsWith('Bearer ')
           ? authKey
           : `Bearer ${authKey}`;
@@ -610,7 +611,8 @@ const server = http.createServer((req, res) => {
       headers['x-openrind-haloop-session'] = sessionContext;
     }
 
-    if (defaultKey) {
+    const isSecureUpstream = isHttps || targetUrl.hostname === '127.0.0.1' || targetUrl.hostname === 'localhost' || targetUrl.hostname === 'host.openshell.internal';
+    if (defaultKey && isSecureUpstream) {
       headers['authorization'] = defaultKey.startsWith('Bearer ')
         ? defaultKey
         : `Bearer ${defaultKey}`;

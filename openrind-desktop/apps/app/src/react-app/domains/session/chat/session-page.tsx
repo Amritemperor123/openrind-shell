@@ -557,7 +557,11 @@ export function SessionPage(props: SessionPageProps) {
                   onTakeControl={browser.takeControl}
                   onResume={browser.resumeControl}
                   onSetBounds={browser.setBounds}
-                  onClosePanel={() => setRightSidebarExpanded(false)}
+                  onClosePanel={() => {
+                    setRightSidebarExpanded(false);
+                    browser.setVisible(false);
+                    browser.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+                  }}
                   onOpenTab={browser.openTab}
                   onCloseTab={browser.closeTab}
                   onSelectTab={browser.selectTab}

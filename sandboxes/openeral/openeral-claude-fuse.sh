@@ -121,6 +121,14 @@ if [ -f /opt/openrind-shell/haloop-agent-proxy.mjs ]; then
     sleep 0.05
   done
   export ANTHROPIC_BASE_URL="http://127.0.0.1:8785"
+  mkdir -p /home/agent/.openrind-shell
+  printf 'export ANTHROPIC_BASE_URL="http://127.0.0.1:8785"\n' > /home/agent/.openrind-shell/env.sh
+  chmod 644 /home/agent/.openrind-shell/env.sh
+  for rc in /sandbox/.bashrc /home/agent/.bashrc /root/.bashrc; do
+    if [ -f "$rc" ] && ! grep -Fq "openrind-shell/env.sh" "$rc"; then
+      printf '\n[ -f /home/agent/.openrind-shell/env.sh ] && . /home/agent/.openrind-shell/env.sh\n[ -f /home/agent/.openrind-shell/openclaw-env.sh ] && . /home/agent/.openrind-shell/openclaw-env.sh\n' >> "$rc"
+    fi
+  done
   for s_file in "$HOME/.claude/settings.json" "/sandbox/claude-home/.claude/settings.json"; do
     if [ -f "$s_file" ]; then
       node -e 'try { const p = process.argv[1]; const f = require("fs"); const s = JSON.parse(f.readFileSync(p, "utf8")); s.env = s.env || {}; s.env.ANTHROPIC_BASE_URL = "http://127.0.0.1:8785"; f.writeFileSync(p, JSON.stringify(s, null, 2)); } catch {}' "$s_file"

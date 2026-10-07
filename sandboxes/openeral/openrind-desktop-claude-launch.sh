@@ -150,6 +150,20 @@ else
   if [ -f "$RUNTIME_DIR/anthropic-base-url" ]; then
     export ANTHROPIC_BASE_URL="$(cat "$RUNTIME_DIR/anthropic-base-url" 2>/dev/null | tr -d '\r\n ')"
   fi
+  mkdir -p /home/agent/.openrind-shell
+  if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
+    printf 'export ANTHROPIC_BASE_URL="%s"\n' "$ANTHROPIC_BASE_URL" > /home/agent/.openrind-shell/env.sh
+    chmod 644 /home/agent/.openrind-shell/env.sh
+  fi
+  if [ -f "$RUNTIME_DIR/openclaw.env" ]; then
+    cp -f "$RUNTIME_DIR/openclaw.env" /home/agent/.openrind-shell/openclaw-env.sh
+    chmod 644 /home/agent/.openrind-shell/openclaw-env.sh
+  fi
+  for rc in /sandbox/.bashrc /home/agent/.bashrc /root/.bashrc; do
+    if [ -f "$rc" ] && ! grep -Fq "openrind-shell/env.sh" "$rc"; then
+      printf '\n[ -f /home/agent/.openrind-shell/env.sh ] && . /home/agent/.openrind-shell/env.sh\n[ -f /home/agent/.openrind-shell/openclaw-env.sh ] && . /home/agent/.openrind-shell/openclaw-env.sh\n' >> "$rc"
+    fi
+  done
   if [ ! -x /usr/local/bin/claude ]; then
     echo "Openrind Shell: FUSE-aware Claude launcher is missing."
     exit 127

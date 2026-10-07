@@ -139,6 +139,13 @@ export function BrowserPanel({
     }
   }, [state.isOpen, isRunning, onSetBounds]);
 
+  useEffect(() => {
+    return () => {
+      onSetBounds({ x: 0, y: 0, width: 0, height: 0 });
+      lastBoundsRef.current = null;
+    };
+  }, [onSetBounds]);
+
   return (
     <div style={{
       display: 'flex',

@@ -148,9 +148,23 @@ export class BrowserCore {
         });
         let created;
         try {
+          const onDownload = async downloadInfo => {
+            try {
+              if (this.artifacts && downloadInfo?.bytes) {
+                await this.artifacts.stage(auth.owner, session.id, downloadInfo.bytes, {
+                  filename: downloadInfo.suggestedFilename || downloadInfo.filename || 'download',
+                  mimeType: downloadInfo.mimeType || 'application/octet-stream',
+                  isDownload: true,
+                });
+              }
+            } catch (err) {
+              console.warn('[browser-core] Download staging error:', err);
+            }
+          };
           created = await this.bounded(session, op, context => provider.create(Object.freeze({
             provider: args.provider, profileMode: args.profileMode, profileId: args.profileId, initialUrl: url,
-            allowedOrigins: [...auth.policy.origins], networkEnforcement: args.networkEnforcement }), context),
+            allowedOrigins: [...auth.policy.origins], networkEnforcement: args.networkEnforcement,
+            onDownload }), { ...context, onDownload }),
             auth, signal, LIMITS.creationMs);
           const capabilities = Capabilities.parse(created.capabilities);
           if (capabilities.provider !== args.provider || canonical(capabilities) !== canonical(provider.capabilities)) throw new BrowserFault('BACKEND_UNAVAILABLE', 'unknown');
@@ -261,7 +275,10 @@ export class BrowserCore {
         fresh();
         if (name === 'browser_tabs') {
           if (args.action === 'list') return { pages: session.pages.map(p => ({ pageId: p.id })) };
-          if (args.action === 'open') { const created = await live.openPage(url, ctx); fresh(); session.pages.push(this.pageRecord(created)); return { pageId: created.pageId }; }
+          if (args.action === 'open') {
+            if (session.provider === 'desktop-webview') throw new BrowserFault('CAPABILITY_UNAVAILABLE');
+            const created = await live.openPage(url, ctx); fresh(); session.pages.push(this.pageRecord(created)); return { pageId: created.pageId };
+          }
           await live.page(args.pageId).close(ctx); fresh(); session.pages = session.pages.filter(p => p.id !== args.pageId); this.refs.invalidate(session.id, args.pageId); return { closed: true };
         }
         if (name === 'browser_navigate') {
