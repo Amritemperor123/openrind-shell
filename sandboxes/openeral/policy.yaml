@@ -95,6 +95,7 @@ network_policies:
       - { path: /usr/local/bin/claude-real }
       - { path: /usr/local/bin/openrind-openclaw-agent }
       - { path: /usr/local/bin/openrind-openhands-agent }
+      - { path: /usr/bin/node }
 
   # --- Claude telemetry and static resources (no inference credential) ---
   claude_support:
@@ -277,4 +278,10 @@ network_policies:
       - { path: /usr/local/bin/openrind-browser-client }
       - { path: /usr/bin/node }
       - { path: /usr/local/bin/browser }
+      - { path: /usr/local/bin/snapshot }
+      - { path: /usr/local/bin/click }
+      - { path: /usr/local/bin/fill }
+      - { path: /usr/local/bin/press }
+      - { path: /usr/local/bin/navigate }
+      - { path: /usr/local/bin/agent-browser }
       - { path: /usr/bin/curl }

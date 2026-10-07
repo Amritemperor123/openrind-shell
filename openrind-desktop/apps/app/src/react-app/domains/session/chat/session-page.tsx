@@ -551,6 +551,9 @@ export function SessionPage(props: SessionPageProps) {
                   onStart={browser.startSession}
                   onStop={browser.stopSession}
                   onNavigate={browser.navigate}
+                  onGoBack={browser.goBack}
+                  onGoForward={browser.goForward}
+                  onReload={browser.reload}
                   onTakeControl={browser.takeControl}
                   onResume={browser.resumeControl}
                   onSetBounds={browser.setBounds}

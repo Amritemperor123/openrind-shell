@@ -26,6 +26,8 @@ export class References {
       return source.subarray(0, length).toString('utf8').replace(/\uFFFD$/u, '');
     };
     const interactiveControls = [];
+    let counter = 0;
+
     const walk = (nodes, depth) => {
       const output = [];
       for (const node of nodes) {
@@ -57,11 +59,16 @@ export class References {
             }
           }
           if (!ref) {
-            ref = newId('br');
+            counter++;
+            ref = `@e${counter}`;
           }
           safe.ref = ref;
-          this.refs.set(safe.ref, { ...context, frameId: node.frameId, generation: raw.documentGeneration,
-            handle: node.handle, bounds: safe.bounds, center: safe.center, expiresAt: this.clock() + LIMITS.idleMs });
+          const rec = { ...context, frameId: node.frameId, generation: raw.documentGeneration,
+            handle: node.handle, bounds: safe.bounds, center: safe.center, expiresAt: this.clock() + LIMITS.idleMs };
+          this.refs.set(safe.ref, rec);
+          if (safe.ref.startsWith('@')) {
+            this.refs.set(safe.ref.slice(1), rec);
+          }
           interactiveControls.push({
             ref: safe.ref,
             role: safe.role || 'element',
@@ -107,25 +114,25 @@ export class References {
       summaryLines.push('(No interactive controls visible in viewport)');
     } else {
       for (const c of inViewportControls) {
-        const boundsStr = c.bounds ? `(bounds: x=${c.bounds.x}, y=${c.bounds.y}, w=${c.bounds.width}, h=${c.bounds.height})` : '';
-        const centerStr = c.center ? `[center: (${c.center[0]}, ${c.center[1]})]` : '';
+        const boundsStr = c.bounds ? ` (bounds: x=${c.bounds.x}, y=${c.bounds.y}, w=${c.bounds.width}, h=${c.bounds.height})` : '';
+        const centerStr = c.center ? ` [center: (${c.center[0]}, ${c.center[1]})]` : '';
         const flags = [];
         if (c.hitTestable) flags.push('hit-testable');
         if (c.editable) flags.push('editable');
         if (c.checked) flags.push('checked');
         if (c.disabled) flags.push('disabled');
-        const flagsStr = flags.length > 0 ? `[${flags.join(', ')}]` : '';
+        const flagsStr = flags.length > 0 ? ` [${flags.join(', ')}]` : '';
         const nameStr = c.name ? ` "${c.name}"` : '';
-        summaryLines.push(`- [ref=${c.ref}] ${c.role}${nameStr} ${boundsStr} ${centerStr} ${flagsStr}`.replace(/\s+/g, ' ').trim());
+        summaryLines.push(`- ${c.role}${nameStr} [ref=${c.ref}]${boundsStr}${centerStr}${flagsStr}`.trim());
       }
     }
     if (offscreenControls.length > 0) {
       summaryLines.push('');
       summaryLines.push(`=== Off-screen / Scrolled Controls (${offscreenControls.length} controls below fold or off-screen) ===`);
       for (const c of offscreenControls.slice(0, 20)) {
-        const boundsStr = c.bounds ? `(bounds: x=${c.bounds.x}, y=${c.bounds.y}, w=${c.bounds.width}, h=${c.bounds.height})` : '';
+        const boundsStr = c.bounds ? ` (bounds: x=${c.bounds.x}, y=${c.bounds.y}, w=${c.bounds.width}, h=${c.bounds.height})` : '';
         const nameStr = c.name ? ` "${c.name}"` : '';
-        summaryLines.push(`- [ref=${c.ref}] ${c.role}${nameStr} ${boundsStr} [off-screen]`.replace(/\s+/g, ' ').trim());
+        summaryLines.push(`- ${c.role}${nameStr} [ref=${c.ref}]${boundsStr} [off-screen]`.trim());
       }
       if (offscreenControls.length > 20) {
         summaryLines.push(`  ... and ${offscreenControls.length - 20} more off-screen controls`);
@@ -135,7 +142,9 @@ export class References {
     return { protocol: 1, documentGeneration: raw.documentGeneration, summary: summaryLines.join('\n'), nodes: walkedNodes, truncated };
   }
   resolve(ref, context, generation) {
-    const record = this.refs.get(ref);
+    const rawRef = String(ref);
+    const cleanRef = rawRef.startsWith('@') ? rawRef.slice(1) : `@${rawRef}`;
+    const record = this.refs.get(rawRef) || this.refs.get(cleanRef);
     if (!record || record.expiresAt <= this.clock() || record.generation !== generation ||
       ['owner', 'sessionId', 'sessionEpoch', 'pageId'].some(key => record[key] !== context[key])) throw new BrowserFault('STALE_REF');
     return Object.freeze({ handle: record.handle, frameId: record.frameId, documentGeneration: record.generation, bounds: record.bounds, center: record.center });

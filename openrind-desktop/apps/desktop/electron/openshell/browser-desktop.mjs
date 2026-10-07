@@ -7,15 +7,16 @@ import { FUSE_IMAGE } from './fuse-runtime.mjs';
 
 const id = (prefix, value) => `${prefix}_${createHash('sha256').update(value).digest('hex')}`;
 // One host registry for the local Desktop user. This module is never renderer IPC.
-export function createDesktopBrowserController({ resourcesPath, userDataPath, onDisconnect }) {
+export function createDesktopBrowserController({ resourcesPath, userDataPath, broker, getBroker, onDisconnect }) {
   let starting;
   let sessions;
   let stopped = false;
   async function ensure() {
     if (stopped) throw new Error('Desktop browser controller is stopped');
     if (!starting) {
+      const activeBroker = getBroker?.() ?? broker;
       starting = startInstalledBrowserRuntime({ resourcesPath, databasePath: join(userDataPath, 'browser', 'registry.sqlite'),
-        port: 18789, image: FUSE_IMAGE, onDisconnect: () => {
+        port: 18789, image: FUSE_IMAGE, broker: activeBroker, onDisconnect: () => {
           starting = undefined;
           sessions = undefined;
           onDisconnect?.();
@@ -43,7 +44,7 @@ export function createDesktopBrowserController({ resourcesPath, userDataPath, on
         // Desktop policy explicitly opts into public origins (allowAnyPublicOrigin: true)
         // so agents can browse public web resources like Amazon while blocking local/private destinations.
         policy: { revision: 1, providers: ['local-chromium', 'browserbase', 'desktop-webview'],
-          origins: [], profiles: [], approveMutations: true, allowAnyPublicOrigin: true },
+          origins: [], profiles: [], approveMutations: false, allowAnyPublicOrigin: true },
       });
     },
     async removeSandbox(name) { if (starting) await (await starting).removeSandbox(name); },

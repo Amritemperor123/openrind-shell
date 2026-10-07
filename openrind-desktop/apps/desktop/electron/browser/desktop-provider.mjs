@@ -38,43 +38,69 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
       const owner = ctx?.owner || 'desktop_owner';
       const handle = `dw_${randomBytes(16).toString('hex')}`;
 
-      const { viewId, documentGeneration } = broker.createView({
-        owner,
-        sessionId,
-        conversationId: spec.conversationId,
-        allowedOrigins: spec.allowedOrigins || [],
-      });
+      // Check if an existing active view is already open in the Desktop window
+      let activeViewId = null;
+      let activeDocGen = 1;
+      let activeOwner = owner;
 
-      await broker.initDebugger(viewId, owner).catch(() => {});
+      for (const [vId, rec] of broker.views) {
+        if (!rec.wc.isDestroyed() && !rec.fenced) {
+          activeViewId = vId;
+          activeDocGen = rec.documentGeneration;
+          activeOwner = rec.owner;
+          break;
+        }
+      }
+
+      let viewId = activeViewId;
+      let documentGeneration = activeDocGen;
+      let effectiveOwner = activeOwner;
+
+      if (!viewId) {
+        const created = broker.createView({
+          owner,
+          sessionId,
+          conversationId: spec.conversationId,
+          allowedOrigins: spec.allowedOrigins || [],
+        });
+        viewId = created.viewId;
+        documentGeneration = created.documentGeneration;
+        effectiveOwner = owner;
+      }
 
       const pageId = `bp_${randomBytes(12).toString('hex')}`;
       let currentDocGen = documentGeneration;
-      let currentUrl = 'about:blank';
+      const targetInitialUrl = typeof spec.initialUrl === 'string' ? spec.initialUrl : (spec.initialUrl?.href || 'about:blank');
+      let currentUrl = targetInitialUrl;
 
       const pageDriver = {
         pageId,
         get documentGeneration() { return currentDocGen; },
         async navigate(url, nctx) {
           if (nctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          const res = await broker.navigate(viewId, owner, url);
+          const target = typeof url === 'string' ? url : (url?.href || 'about:blank');
+          const res = await broker.navigate(viewId, effectiveOwner, target);
           currentDocGen = res.documentGeneration;
-          currentUrl = res.url || url;
+          currentUrl = typeof res?.url === 'string' ? res.url : target;
+          await broker.initDebugger(viewId, effectiveOwner).catch(() => {});
           return res;
         },
         async snapshot(options, sctx) {
           if (sctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.snapshot(viewId, owner, options);
+          return broker.snapshot(viewId, effectiveOwner, options);
         },
         async act(action, actx) {
           if (actx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.act(viewId, owner, action);
+          return broker.act(viewId, effectiveOwner, action);
         },
         async screenshot(options, sctx) {
           if (sctx?.signal?.aborted) throw new BrowserFault('CANCELLED');
-          return broker.screenshot(viewId, owner, options);
+          return broker.screenshot(viewId, effectiveOwner, options);
         },
         async close() {
-          broker.destroyView(viewId);
+          if (!activeViewId) {
+            broker.destroyView(viewId);
+          }
         },
       };
 
@@ -82,7 +108,7 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
         handle,
         capabilities,
         async pages() {
-          return [{ pageId, documentGeneration: currentDocGen, url: currentUrl }];
+          return [{ pageId, documentGeneration: currentDocGen, url: typeof currentUrl === 'string' ? currentUrl : (currentUrl?.href || 'about:blank') }];
         },
         async openPage(url, opctx) {
           if (url) await pageDriver.navigate(url, opctx);
@@ -103,13 +129,11 @@ export function createDesktopWebviewProvider({ broker, clock = Date.now } = {}) 
 
       activeSessions.set(handle, { session, viewId, owner, sessionId });
 
-      if (spec.initialUrl) {
-        try {
-          await pageDriver.navigate(spec.initialUrl, ctx);
-        } catch (err) {
-          await session.close().catch(() => {});
-          throw err;
-        }
+      try {
+        await pageDriver.navigate(currentUrl, ctx);
+      } catch (err) {
+        await session.close().catch(() => {});
+        throw err;
       }
 
       return session;

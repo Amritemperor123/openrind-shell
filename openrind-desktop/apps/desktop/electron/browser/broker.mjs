@@ -25,7 +25,10 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
 
   function getRecord(viewId, owner) {
     const record = views.get(viewId);
-    if (!record || (owner && record.owner !== owner)) {
+    if (!record) {
+      throw new BrowserFault('SESSION_LOST');
+    }
+    if (owner && record.owner !== owner && !(owner === 'desktop_owner' && record.owner === 'desktop_user')) {
       throw new BrowserFault('SESSION_LOST');
     }
     if (record.fenced) {
@@ -94,18 +97,43 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       wc.on('will-navigate', guardNavigation);
       wc.on('will-redirect', guardNavigation);
 
-      // Detach and crash fencing: if debugger is detached or renderer crashes, fence view
-      wc.debugger.on('detach', () => {
-        record.fenced = true;
-        record.epoch++;
-        view.setVisible(false);
+      // Detach and crash fencing
+      wc.debugger.on('detach', (_event, reason) => {
+        // Do not fence on target closed or process swaps caused by normal navigation
+        if (reason && reason !== 'target closed' && reason !== 'replaced_with_devtools') {
+          // Keep record alive, allow re-attachment
+        }
       });
 
-      wc.on('render-process-gone', () => {
-        record.fenced = true;
-        record.epoch++;
-        view.setVisible(false);
+      wc.on('render-process-gone', (_event, details) => {
+        if (details?.reason === 'crashed' || details?.reason === 'killed' || details?.reason === 'oom') {
+          record.fenced = true;
+          record.epoch++;
+          try { view.setVisible(false); } catch {}
+        }
       });
+
+      // Synchronize in-page navigation and history state with Desktop UI
+      const notifyNavigation = () => {
+        try {
+          const currentUrl = wc.getURL();
+          const canBack = Boolean(wc.navigationHistory?.canGoBack?.() ?? wc.canGoBack?.());
+          const canForward = Boolean(wc.navigationHistory?.canGoForward?.() ?? wc.canGoForward?.());
+          const mainWindow = getMainWindow?.();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('openrind-desktop:browser:event', {
+              type: 'navigate',
+              viewId,
+              url: currentUrl,
+              canGoBack: canBack,
+              canGoForward: canForward,
+            });
+          }
+        } catch {}
+      };
+
+      wc.on('did-navigate', notifyNavigation);
+      wc.on('did-navigate-in-page', notifyNavigation);
 
       // Track view
       views.set(viewId, record);
@@ -117,9 +145,24 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       const mainWindow = getMainWindow?.();
       if (mainWindow && !mainWindow.isDestroyed()) {
         try {
+          // Hide and detach any previous child views so only one active view is rendered
+          for (const [existingId, existingRecord] of views) {
+            if (existingId !== viewId && existingRecord.view && !existingRecord.wc.isDestroyed()) {
+              try {
+                existingRecord.view.setVisible(false);
+                mainWindow.contentView.removeChildView(existingRecord.view);
+              } catch {}
+            }
+          }
           mainWindow.contentView.addChildView(view);
           if (bounds) {
-            view.setBounds(bounds);
+            const zoom = mainWindow?.webContents?.getZoomFactor?.() || 1;
+            view.setBounds({
+              x: Math.max(0, Math.round((bounds.x || 0) * zoom)),
+              y: Math.max(0, Math.round((bounds.y || 0) * zoom)),
+              width: Math.max(0, Math.round((bounds.width || 0) * zoom)),
+              height: Math.max(0, Math.round((bounds.height || 0) * zoom)),
+            });
           }
           mainWindow.webContents.send('openrind-desktop:browser:event', {
             type: 'start',
@@ -142,9 +185,19 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       const wc = record.wc;
 
       if (!wc.debugger.isAttached()) {
-        wc.debugger.attach('1.3');
-        await wc.debugger.sendCommand('Page.enable');
-        await wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true });
+        try {
+          wc.debugger.attach('1.3');
+          await Promise.race([
+            wc.debugger.sendCommand('Page.enable'),
+            new Promise((_, r) => setTimeout(() => r(new Error('Debugger command timeout')), 2500))
+          ]);
+          await Promise.race([
+            wc.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true }),
+            new Promise((_, r) => setTimeout(() => r(new Error('Debugger command timeout')), 2500))
+          ]);
+        } catch (err) {
+          console.warn('[broker:initDebugger] Notice attaching debugger:', err?.message || err);
+        }
       }
     },
 
@@ -173,6 +226,26 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
         };
       } catch (err) {
         if (err instanceof BrowserFault) throw err;
+        const isAborted = err?.errno === -3 || err?.code === 'ERR_ABORTED' || err?.message?.includes('ERR_ABORTED');
+        if (isAborted && !record.wc.isDestroyed()) {
+          const currentUrl = record.wc.getURL() || targetUrl;
+          console.log('[broker:navigate] Navigation followed redirect/aborted cleanly. URL is:', currentUrl);
+          const mainWindow = getMainWindow?.();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            try {
+              mainWindow.webContents.send('openrind-desktop:browser:event', {
+                type: 'navigate',
+                viewId,
+                url: currentUrl,
+              });
+            } catch {}
+          }
+          return {
+            url: currentUrl,
+            documentGeneration: record.documentGeneration,
+          };
+        }
+        console.error('[broker:navigate] Navigation failed for:', targetUrl, err?.message || err);
         throw new BrowserFault('BACKEND_UNAVAILABLE');
       }
     },
@@ -301,7 +374,7 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
               let handle = undefined;
               if (isInteractive) {
                 handle = 'h_' + (++idCounter);
-                node.setAttribute('data-openrind-handle', handle);
+                try { node.setAttribute('data-openrind-handle', handle); } catch {}
               }
 
               count++;
@@ -340,20 +413,24 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
 
         let result;
         if (record.wc.debugger.isAttached()) {
-          const evalRes = await record.wc.debugger.sendCommand('Runtime.evaluate', {
-            expression: expr,
-            returnByValue: true,
-          });
-          result = evalRes.result?.value || [];
-        } else {
+          try {
+            const evalRes = await record.wc.debugger.sendCommand('Runtime.evaluate', {
+              expression: expr,
+              returnByValue: true,
+            });
+            result = evalRes.result?.value;
+          } catch {}
+        }
+        if (!result) {
           result = await record.wc.executeJavaScript(expr);
         }
 
         return {
           documentGeneration: record.documentGeneration,
-          nodes: result,
+          nodes: result || [],
         };
       } catch (err) {
+        console.error('[broker:snapshot] Snapshot failed:', err?.message || err);
         throw new BrowserFault('BACKEND_UNAVAILABLE');
       }
     },
@@ -380,7 +457,13 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
               el.click();
             } else if (kind === 'fill') {
               el.focus();
-              el.value = text || '';
+              const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set ||
+                                   Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+              if (nativeSetter) {
+                nativeSetter.call(el, text || '');
+              } else {
+                el.value = text || '';
+              }
               el.dispatchEvent(new Event('input', { bubbles: true }));
               el.dispatchEvent(new Event('change', { bubbles: true }));
             } else if (kind === 'select') {
@@ -389,11 +472,16 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
                 el.dispatchEvent(new Event('change', { bubbles: true }));
               }
             } else if (kind === 'press') {
-              el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
-              el.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
-              if (key === 'Enter' && el.form) {
-                if (typeof el.form.requestSubmit === 'function') el.form.requestSubmit();
-                else el.form.submit();
+              el.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true }));
+              el.dispatchEvent(new KeyboardEvent('keyup', { key, code: key, bubbles: true }));
+              if (key === 'Enter') {
+                if (el.form) {
+                  if (typeof el.form.requestSubmit === 'function') el.form.requestSubmit();
+                  else el.form.submit();
+                } else {
+                  el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                  el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+                }
               }
             }
             return { ok: true };
@@ -406,6 +494,20 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
           if (kind === 'press') {
             record.wc.sendInputEvent({ type: 'keyDown', keyCode: key });
             record.wc.sendInputEvent({ type: 'keyUp', keyCode: key });
+            await record.wc.executeJavaScript(`
+              (() => {
+                const active = document.activeElement;
+                if (active && "${key}" === "Enter") {
+                  if (active.form) {
+                    if (typeof active.form.requestSubmit === "function") active.form.requestSubmit();
+                    else active.form.submit();
+                  } else {
+                    active.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                    active.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+                  }
+                }
+              })()
+            `).catch(() => {});
           } else if (kind === 'scroll') {
             const dist = distance || 250;
             const deltaX = direction === 'left' ? -dist : direction === 'right' ? dist : 0;
@@ -433,6 +535,9 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       const record = views.get(viewId);
       if (record && !record.wc.isDestroyed()) {
         record.view.setBounds(bounds);
+        if (typeof bounds?.width === 'number' && typeof bounds?.height === 'number') {
+          record.view.setVisible(bounds.width > 0 && bounds.height > 0);
+        }
       }
     },
 
@@ -441,6 +546,41 @@ export function createOwnedContentsBroker({ getMainWindow, clock = Date.now } = 
       if (record && !record.wc.isDestroyed()) {
         record.view.setVisible(Boolean(visible));
       }
+    },
+
+    goBack(viewId, owner) {
+      const record = getRecord(viewId, owner);
+      if (record && !record.wc.isDestroyed()) {
+        const canBack = Boolean(record.wc.navigationHistory?.canGoBack?.() ?? record.wc.canGoBack?.());
+        if (canBack) {
+          if (record.wc.navigationHistory?.goBack) record.wc.navigationHistory.goBack();
+          else record.wc.goBack();
+          return true;
+        }
+      }
+      return false;
+    },
+
+    goForward(viewId, owner) {
+      const record = getRecord(viewId, owner);
+      if (record && !record.wc.isDestroyed()) {
+        const canFwd = Boolean(record.wc.navigationHistory?.canGoForward?.() ?? record.wc.canGoForward?.());
+        if (canFwd) {
+          if (record.wc.navigationHistory?.goForward) record.wc.navigationHistory.goForward();
+          else record.wc.goForward();
+          return true;
+        }
+      }
+      return false;
+    },
+
+    reload(viewId, owner) {
+      const record = getRecord(viewId, owner);
+      if (record && !record.wc.isDestroyed()) {
+        record.wc.reload();
+        return true;
+      }
+      return false;
     },
 
     destroyView(viewId) {

@@ -25,10 +25,9 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     });
 
     try {
-      await broker.initDebugger(view.viewId, owner);
-      if (initialUrl) {
-        await broker.navigate(view.viewId, owner, initialUrl);
-      }
+      const urlToLoad = initialUrl && initialUrl !== 'about:blank' ? initialUrl : 'about:blank';
+      await broker.navigate(view.viewId, owner, urlToLoad);
+      await broker.initDebugger(view.viewId, owner).catch(() => {});
     } catch (err) {
       broker.destroyView(view.viewId);
       throw err;
@@ -64,6 +63,42 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
       });
     } catch {}
     return { ok: true, url: res.url, documentGeneration: res.documentGeneration };
+  });
+
+  ipcMain.handle('openrind-desktop:browser:go-back', async (event, opts = {}) => {
+    checkSender(event);
+    const { viewId, owner = 'desktop_user' } = opts;
+    if (!viewId) return { ok: false };
+    try {
+      const success = broker.goBack(viewId, owner);
+      return { ok: success };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+  ipcMain.handle('openrind-desktop:browser:go-forward', async (event, opts = {}) => {
+    checkSender(event);
+    const { viewId, owner = 'desktop_user' } = opts;
+    if (!viewId) return { ok: false };
+    try {
+      const success = broker.goForward(viewId, owner);
+      return { ok: success };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+  ipcMain.handle('openrind-desktop:browser:reload', async (event, opts = {}) => {
+    checkSender(event);
+    const { viewId, owner = 'desktop_user' } = opts;
+    if (!viewId) return { ok: false };
+    try {
+      const success = broker.reload(viewId, owner);
+      return { ok: success };
+    } catch {
+      return { ok: false };
+    }
   });
 
   ipcMain.handle('openrind-desktop:browser:stop', async (event, opts = {}) => {
@@ -111,15 +146,16 @@ export function registerBrowserIpc({ broker, assertTrustedSender }) {
     checkSender(event);
     const { viewId, bounds } = opts;
     if (viewId && bounds) {
-      const w = Math.floor(bounds.width || 0);
-      const h = Math.floor(bounds.height || 0);
+      const zoom = (typeof event.sender?.getZoomFactor === 'function' ? event.sender.getZoomFactor() : 1) || 1;
+      const w = Math.round((bounds.width || 0) * zoom);
+      const h = Math.round((bounds.height || 0) * zoom);
       if (w <= 0 || h <= 0) {
         broker.setBounds(viewId, { x: 0, y: 0, width: 0, height: 0 });
         broker.setVisible(viewId, false);
       } else {
         broker.setBounds(viewId, {
-          x: Math.max(0, Math.floor(bounds.x || 0)),
-          y: Math.max(0, Math.floor(bounds.y || 0)),
+          x: Math.max(0, Math.round((bounds.x || 0) * zoom)),
+          y: Math.max(0, Math.round((bounds.y || 0) * zoom)),
           width: w,
           height: h,
         });

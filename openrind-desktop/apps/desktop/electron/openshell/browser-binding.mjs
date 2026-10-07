@@ -27,12 +27,24 @@ export function browserBinding({ endpoint, bridgeAddress, bindingId }) {
         '/usr/local/bin/openrind-browser-client',
         '/usr/bin/node',
         '/usr/local/bin/browser',
+        '/usr/local/bin/snapshot',
+        '/usr/local/bin/click',
+        '/usr/local/bin/fill',
+        '/usr/local/bin/press',
+        '/usr/local/bin/navigate',
+        '/usr/local/bin/agent-browser',
         '/usr/bin/curl'
       ] },
     networkPolicy: { name, endpoints: [route], binaries: [
       { path: '/usr/local/bin/openrind-browser-client' },
       { path: '/usr/bin/node' },
       { path: '/usr/local/bin/browser' },
+      { path: '/usr/local/bin/snapshot' },
+      { path: '/usr/local/bin/click' },
+      { path: '/usr/local/bin/fill' },
+      { path: '/usr/local/bin/press' },
+      { path: '/usr/local/bin/navigate' },
+      { path: '/usr/local/bin/agent-browser' },
       { path: '/usr/bin/curl' }
     ] },
   });

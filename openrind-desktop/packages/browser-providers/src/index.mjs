@@ -1,8 +1,9 @@
 import { Capabilities, BrowserFault } from '@openrind/browser-contract';
 import { createLocalChromiumProvider } from './local-chromium.mjs';
 import { createBrowserbaseProvider } from './browserbase.mjs';
+import { createBridgedDesktopWebviewProvider } from './desktop-webview.mjs';
 
-export { createLocalChromiumProvider, createBrowserbaseProvider };
+export { createLocalChromiumProvider, createBrowserbaseProvider, createBridgedDesktopWebviewProvider };
 
 export function providerRegistry(providers = []) {
   const registry = new Map();
@@ -15,8 +16,9 @@ export function providerRegistry(providers = []) {
   return registry;
 }
 
-export const installedProviders = Object.freeze(
-  process.env.OPENRIND_ENABLE_LOCAL_PROVIDER === '1'
+export const installedProviders = Object.freeze([
+  createBridgedDesktopWebviewProvider(),
+  ...(process.env.OPENRIND_ENABLE_LOCAL_PROVIDER === '1'
     ? [createLocalChromiumProvider(), createBrowserbaseProvider()]
-    : []
-);
+    : [])
+]);

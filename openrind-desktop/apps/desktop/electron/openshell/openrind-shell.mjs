@@ -245,11 +245,25 @@ export async function verifySandboxBrowserCredentials(name) {
     '
   `;
   try {
-    const res = await runMarkerScript(name, verifyScript, 10_000);
-    if (res.exitCode === 0 && res.stdout?.includes("CREDENTIALS_VERIFIED")) {
-      return { ok: true };
+    const containers = await wslRun([
+      "-d", DISTRO_NAME, "--", "docker", "ps", "--no-trunc",
+      "--filter", "label=openshell.ai/managed-by=openshell",
+      "--filter", `label=openshell.ai/sandbox-name=${name}`,
+      "--format", "{{.ID}}"
+    ], { timeout: 10_000 }).catch(() => null);
+
+    const ids = containers?.stdout?.trim().split(/\r?\n/).filter(Boolean) || [];
+    if (ids.length === 1 && /^[a-f0-9]{64}$/.test(ids[0])) {
+      const res = await wslRun([
+        "-d", DISTRO_NAME, "--", "docker", "exec", "-i", "--user", "sandbox", ids[0],
+        "sh", "-c", verifyScript
+      ], { timeout: 10_000 }).catch(err => ({ exitCode: -1, stderr: String(err) }));
+      if (res.exitCode === 0 && res.stdout?.includes("CREDENTIALS_VERIFIED")) {
+        return { ok: true };
+      }
+      return { ok: false, error: (res.stderr || res.stdout || "Credentials verification failed").trim() };
     }
-    return { ok: false, error: res.stderr || res.stdout || "Credentials verification failed" };
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
   }

@@ -88,18 +88,8 @@ RUN mkdir -p /etc/openrind-browser \
     && chmod 0755 /etc/openrind-browser /opt/openrind-browser /usr/local/bin/openrind-browser-client /usr/local/bin/browser \
     && chmod 0644 /etc/openrind-browser/descriptor.json /opt/openrind-browser/*.cjs /opt/openrind-browser/*.json \
     && sed -i 's/\r$//' /usr/local/bin/browser \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_start \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_navigate \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_snapshot \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_click \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_fill \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_close \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_status \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_tabs \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_open \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_type \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_press \
-    && ln -sf /usr/local/bin/browser /usr/local/bin/browser_screenshot
+    && for cmd in start navigate snapshot click fill close status tabs open type press screenshot; do ln -sf /usr/local/bin/browser "/usr/local/bin/browser_$cmd"; ln -sf /usr/local/bin/browser "/usr/local/bin/$cmd"; done \
+    && ln -sf /usr/local/bin/browser /usr/local/bin/agent-browser
 COPY sandboxes/openeral/openhands-agent.py /opt/openrind-openhands/openhands-agent.py
 COPY sandboxes/openeral/openrind-openhands-fuse.sh /usr/local/bin/openrind-openhands
 COPY sandboxes/openeral/openeral-claude-fuse.sh /usr/local/bin/claude

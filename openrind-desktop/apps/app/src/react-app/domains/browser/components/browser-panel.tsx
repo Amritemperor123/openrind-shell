@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, RotateCw, Loader2 } from 'lucide-react';
 import type { BrowserPanelState, BrowserProviderKind } from '../types';
 
 export interface BrowserPanelProps {
@@ -6,6 +7,9 @@ export interface BrowserPanelProps {
   onStart: (provider: BrowserProviderKind, url?: string) => Promise<void>;
   onStop: () => Promise<void>;
   onNavigate?: (url: string) => Promise<void>;
+  onGoBack?: () => Promise<void>;
+  onGoForward?: () => Promise<void>;
+  onReload?: () => Promise<void>;
   onTakeControl: () => Promise<void>;
   onResume: () => Promise<void>;
   onSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => void;
@@ -22,6 +26,9 @@ export function BrowserPanel({
   onStart,
   onStop,
   onNavigate,
+  onGoBack,
+  onGoForward,
+  onReload,
   onTakeControl,
   onResume,
   onSetBounds,
@@ -33,9 +40,15 @@ export function BrowserPanel({
   onSelectTab,
 }: BrowserPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastBoundsRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<BrowserProviderKind>(state.provider || 'local-chromium');
+  const lastBoundsRef = useRef<{ x: number; y: number; width: number; height: number; dpr?: number } | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<BrowserProviderKind>(state.provider || 'desktop-webview');
   const [inputUrl, setInputUrl] = useState(state.currentUrl === 'about:blank' ? '' : state.currentUrl);
+
+  useEffect(() => {
+    if (state.provider && state.provider !== selectedProvider) {
+      setSelectedProvider(state.provider);
+    }
+  }, [state.provider]);
 
   useEffect(() => {
     if (state.currentUrl && state.currentUrl !== 'about:blank') {
@@ -57,18 +70,20 @@ export function BrowserPanel({
       const maxHeight = Math.max(0, window.innerHeight - y);
       const width = Math.min(Math.round(rect.width), maxWidth);
       const height = Math.min(Math.round(rect.height), maxHeight);
-      const next = { x, y, width, height };
+      const dpr = window.devicePixelRatio;
+      const next = { x, y, width, height, dpr };
       if (
         lastBoundsRef.current &&
         lastBoundsRef.current.x === next.x &&
         lastBoundsRef.current.y === next.y &&
         lastBoundsRef.current.width === next.width &&
-        lastBoundsRef.current.height === next.height
+        lastBoundsRef.current.height === next.height &&
+        lastBoundsRef.current.dpr === next.dpr
       ) {
         return;
       }
       lastBoundsRef.current = next;
-      onSetBounds(next);
+      onSetBounds({ x, y, width, height });
     };
 
     const scheduleUpdate = () => {
@@ -84,12 +99,32 @@ export function BrowserPanel({
     observer.observe(containerRef.current);
     window.addEventListener('resize', scheduleUpdate);
     window.addEventListener('scroll', scheduleUpdate, true);
+    window.visualViewport?.addEventListener('resize', scheduleUpdate);
+    window.visualViewport?.addEventListener('scroll', scheduleUpdate);
+
+    let mq: MediaQueryList | null = null;
+    const onMqChange = () => {
+      scheduleUpdate();
+      updateMqListener();
+    };
+    const updateMqListener = () => {
+      if (mq) mq.removeEventListener('change', onMqChange);
+      mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      mq.addEventListener('change', onMqChange);
+    };
+    updateMqListener();
+
+    const pollTimer = setInterval(scheduleUpdate, 250);
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
+      clearInterval(pollTimer);
       observer.disconnect();
       window.removeEventListener('resize', scheduleUpdate);
       window.removeEventListener('scroll', scheduleUpdate, true);
+      window.visualViewport?.removeEventListener('resize', scheduleUpdate);
+      window.visualViewport?.removeEventListener('scroll', scheduleUpdate);
+      if (mq) mq.removeEventListener('change', onMqChange);
     };
   }, [state.isOpen, onSetBounds]);
 
@@ -215,102 +250,192 @@ export function BrowserPanel({
       </div>
 
       {/* Multiple Tabs Strip */}
-      {state.tabs.length > 0 && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '4px 8px 0 8px',
-          gap: '4px',
-          backgroundColor: '#141416',
-          borderBottom: '1px solid #2e2e38',
-          overflowX: 'auto',
-        }}>
-          {state.tabs.map((tab) => {
-            const isActive = tab.pageId === (state.activeTabId || state.tabs[0]?.pageId);
-            return (
-              <div
-                key={tab.pageId}
-                onClick={() => onSelectTab?.(tab.pageId)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 8px',
-                  borderRadius: '4px 4px 0 0',
-                  backgroundColor: isActive ? '#222227' : '#18181b',
-                  color: isActive ? '#f4f4f5' : '#71717a',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  border: '1px solid #2e2e38',
-                  borderBottom: isActive ? '1px solid #222227' : '1px solid #2e2e38',
-                  maxWidth: '140px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                <span>🌐</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {tab.title || (tab.url === 'about:blank' ? 'New Tab' : tab.url.replace(/^https?:\/\//, ''))}
-                </span>
-                {state.tabs.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCloseTab?.(tab.pageId);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#71717a',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      padding: '0 2px',
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => onOpenTab?.()}
-            title="Open new tab"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#a1a1aa',
-              cursor: 'pointer',
-              padding: '2px 8px',
-              fontSize: '14px',
-              fontWeight: 'bold',
-            }}
-          >
-            +
-          </button>
-        </div>
-      )}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: '4px 8px 0 8px',
+        gap: '4px',
+        backgroundColor: '#141416',
+        borderBottom: '1px solid #2e2e38',
+        overflowX: 'auto',
+      }}>
+        {state.tabs.map((tab) => {
+          const isActive = tab.pageId === (state.activeTabId || state.tabs[0]?.pageId);
+          return (
+            <div
+              key={tab.pageId}
+              onClick={() => onSelectTab?.(tab.pageId)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 8px',
+                borderRadius: '4px 4px 0 0',
+                backgroundColor: isActive ? '#222227' : '#18181b',
+                color: isActive ? '#f4f4f5' : '#71717a',
+                cursor: 'pointer',
+                fontSize: '11px',
+                border: '1px solid #2e2e38',
+                borderBottom: isActive ? '1px solid #222227' : '1px solid #2e2e38',
+                maxWidth: '140px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              <span>🌐</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {tab.title || (tab.url === 'about:blank' ? 'New Tab' : tab.url.replace(/^https?:\/\//, ''))}
+              </span>
+              {state.tabs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseTab?.(tab.pageId);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#71717a',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    padding: '0 2px',
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => onOpenTab?.()}
+          title="Open new tab"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#a1a1aa',
+            cursor: 'pointer',
+            padding: '2px 8px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+          }}
+        >
+          +
+        </button>
+      </div>
 
       {/* URL & Navigation Strip */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '6px 12px',
-        gap: '8px',
+        padding: '6px 10px',
+        gap: '6px',
         backgroundColor: '#222227',
         borderBottom: '1px solid #2e2e38',
       }}>
+        {/* Navigation History & Refresh Controls (like a real browser) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <button
+            type="button"
+            disabled={!isRunning || !state.canGoBack}
+            onClick={() => onGoBack?.()}
+            title="Click to go back"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '26px',
+              height: '26px',
+              borderRadius: '50%',
+              border: 'none',
+              background: 'transparent',
+              color: isRunning && state.canGoBack ? '#f4f4f5' : '#52525b',
+              cursor: isRunning && state.canGoBack ? 'pointer' : 'default',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              if (isRunning && state.canGoBack) (e.currentTarget as HTMLElement).style.backgroundColor = '#33333d';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
+          >
+            <ArrowLeft size={14} />
+          </button>
+
+          <button
+            type="button"
+            disabled={!isRunning || !state.canGoForward}
+            onClick={() => onGoForward?.()}
+            title="Click to go forward"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '26px',
+              height: '26px',
+              borderRadius: '50%',
+              border: 'none',
+              background: 'transparent',
+              color: isRunning && state.canGoForward ? '#f4f4f5' : '#52525b',
+              cursor: isRunning && state.canGoForward ? 'pointer' : 'default',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              if (isRunning && state.canGoForward) (e.currentTarget as HTMLElement).style.backgroundColor = '#33333d';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
+          >
+            <ArrowRight size={14} />
+          </button>
+
+          <button
+            type="button"
+            disabled={!isRunning}
+            onClick={() => onReload?.()}
+            title="Reload this page"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '26px',
+              height: '26px',
+              borderRadius: '50%',
+              border: 'none',
+              background: 'transparent',
+              color: isRunning ? '#f4f4f5' : '#52525b',
+              cursor: isRunning ? 'pointer' : 'default',
+              transition: 'background-color 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              if (isRunning) (e.currentTarget as HTMLElement).style.backgroundColor = '#33333d';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
+          >
+            {state.isLoading ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <RotateCw size={13} />
+            )}
+          </button>
+        </div>
+
+        {/* Address Bar */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           flex: 1,
           backgroundColor: '#18181b',
-          borderRadius: '4px',
+          borderRadius: '16px',
           border: '1px solid #3f3f46',
-          padding: '2px 8px',
+          padding: '2px 10px',
           gap: '6px',
         }}>
           <span style={{ color: state.currentUrl.startsWith('https://') ? '#10b981' : '#a1a1aa' }}>

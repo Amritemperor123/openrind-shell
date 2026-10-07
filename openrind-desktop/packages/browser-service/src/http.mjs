@@ -6,7 +6,7 @@ const result = value => {
   const isErr = value.ok === false;
   let text = JSON.stringify(value);
   if (value.data?.summary) {
-    text = `${value.data.summary}\n\n=== Raw DOM Tree ===\n${JSON.stringify(value)}`;
+    text = value.data.summary;
   }
   return {
     ...(isErr ? { isError: true } : {}),

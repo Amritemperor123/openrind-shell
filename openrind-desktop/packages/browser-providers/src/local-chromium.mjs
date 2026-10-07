@@ -2,9 +2,17 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { chromium } from 'playwright';
 import { BrowserFault, LIMITS } from '@openrind/browser-contract';
 import { PlaywrightSession, findChromiumExecutable } from '@openrind/browser-drivers';
+
+async function getChromium() {
+  try {
+    const mod = await import('playwright');
+    return mod.chromium || mod.default?.chromium;
+  } catch {
+    throw new BrowserFault('BACKEND_UNAVAILABLE');
+  }
+}
 
 export function createLocalChromiumProvider(options = {}) {
   const profileMode = options.profile || 'ephemeral';
@@ -61,6 +69,7 @@ export function createLocalChromiumProvider(options = {}) {
       const isHeadless = process.env.OPENRIND_HEADLESS === 'true' ? true : (options.headless === true ? true : false);
       let context;
       try {
+        const chromium = await getChromium();
         context = await chromium.launchPersistentContext(profileDir, {
           executablePath,
           headless: isHeadless,

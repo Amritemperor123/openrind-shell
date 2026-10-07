@@ -71,7 +71,16 @@ async function main() {
   let cmd = process.argv[2];
   let shift = 3;
 
-  if (binName.startsWith('browser_')) {
+  if (binName === 'snapshot') {
+    cmd = 'snapshot';
+    shift = 2;
+  } else if (binName === 'agent-browser' || binName === 'agent_browser') {
+    cmd = process.argv[2];
+    shift = 3;
+  } else if (['start', 'navigate', 'click', 'fill', 'close', 'status', 'tabs', 'open', 'type', 'press', 'screenshot', 'scroll'].includes(binName)) {
+    cmd = binName;
+    shift = 2;
+  } else if (binName.startsWith('browser_')) {
     cmd = binName.slice('browser_'.length);
     shift = 2;
   } else if (cmd && cmd.startsWith('browser_')) {
@@ -295,7 +304,7 @@ Usage:
     } else if (cmd === 'press' || cmd === 'key' || cmd === 'submit') {
       let key = process.argv[shift] || 'Enter';
       let ref = undefined;
-      if (process.argv[shift] && process.argv[shift].startsWith('h_')) {
+      if (process.argv[shift] && (process.argv[shift].startsWith('@') || process.argv[shift].startsWith('e') || process.argv[shift].startsWith('br_') || process.argv[shift].startsWith('h_'))) {
         ref = process.argv[shift];
         key = process.argv[shift + 1] || 'Enter';
       }
@@ -315,6 +324,25 @@ Usage:
         arguments: args,
       });
       console.log(`Pressed key: ${key}${ref ? ` on [${ref}]` : ''}`);
+    } else if (cmd === 'scroll') {
+      let direction = process.argv[shift] || 'down';
+      let distance = parseInt(process.argv[shift + 1] || '800', 10);
+      if (isNaN(distance)) distance = 800;
+      const session = readSession();
+      if (!session) { console.error('No active browser session.'); process.exit(1); }
+      const operationId = `op_${randomBytes(8).toString('hex')}`;
+      await client.callTool({
+        name: 'browser_scroll',
+        arguments: {
+          sessionId: session.sessionId,
+          sessionEpoch: session.sessionEpoch,
+          pageId: session.pageId,
+          operationId,
+          direction,
+          distance,
+        },
+      });
+      console.log(`Scrolled ${direction} ${distance}px`);
     } else if (cmd === 'screenshot') {
       const session = readSession();
       if (!session) { console.error('No active browser session.'); process.exit(1); }

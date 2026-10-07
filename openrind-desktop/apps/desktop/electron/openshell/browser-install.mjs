@@ -77,8 +77,12 @@ export async function installBrowserSandbox({ sandboxName, descriptor, networkPo
     `], { timeout: 15_000 }).catch(err => ({ exitCode: -1, stderr: String(err) }));
   if (mcpRes.exitCode !== 0) console.warn('[browser-install] MCP config write failed:', mcpRes.stderr);
 
+  const linkCmds = [
+    'start', 'navigate', 'snapshot', 'click', 'fill', 'close', 'status', 'tabs', 'open', 'type', 'press', 'screenshot'
+  ].map(c => `ln -sf /usr/local/bin/browser /usr/local/bin/browser_${c} && ln -sf /usr/local/bin/browser /usr/local/bin/${c}`).join(' && ');
+
   const binRes = await wslRun(['-d', DISTRO_NAME, '--', 'docker', 'exec', '-i', '--user', '0', containerId,
-    'sh', '-c', 'cat > /usr/local/bin/browser && sed -i "s/\\r$//" /usr/local/bin/browser && chmod 0755 /usr/local/bin/browser && for cmd in start navigate snapshot click fill close status tabs open type press screenshot; do ln -sf /usr/local/bin/browser "/usr/local/bin/browser_$cmd"; done'], {
+    'sh', '-c', `cat > /usr/local/bin/browser && sed -i "s/\\r$//" /usr/local/bin/browser && chmod 0755 /usr/local/bin/browser && ${linkCmds} && ln -sf /usr/local/bin/browser /usr/local/bin/agent-browser`], {
     stdin: '#!/bin/sh\nbase="$(basename "$0")"\nexport OPENRIND_BROWSER_BIN="$base"\nexec /usr/bin/node /opt/openrind-browser/cli.cjs "$@"\n',
     timeout: 15_000,
   }).catch(err => ({ exitCode: -1, stderr: String(err) }));

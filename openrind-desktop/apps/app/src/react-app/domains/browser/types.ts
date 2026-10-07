@@ -39,6 +39,9 @@ export interface BrowserPanelState {
   trustedOrigin: string | null;
   tabs: BrowserTab[];
   activeTabId: string | null;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  isLoading?: boolean;
   handoff: BrowserHandoffState;
   artifacts: BrowserArtifact[];
   error: string | null;

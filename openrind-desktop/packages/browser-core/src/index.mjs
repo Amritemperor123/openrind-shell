@@ -34,6 +34,9 @@ export class BrowserCore {
       Capabilities.parse(provider.capabilities); this.providers.set(provider.kind, provider);
     }
     this.live = new Map(); this.queues = new Map(); this.inFlight = new Map(); this.unsettled = new Set(); this.stopping = false;
+    try {
+      this.repo.db.prepare("UPDATE sessions SET data = json_set(data, '$.state', 'Closed') WHERE json_extract(data, '$.state') NOT IN ('Closed', 'Failed')").run();
+    } catch {}
   }
   publicCapabilities(value) {
     return publicCapabilities(value, Boolean(this.artifacts));
@@ -134,7 +137,7 @@ export class BrowserCore {
           profileId: args.profileId || null, resource: null, handoff: null };
         op = this.operation(auth, session, 'browser_start', args, digest);
         this.repo.transaction(() => {
-          const active = this.repo.sessions().filter(s => !terminal.has(s.state));
+          const active = this.repo.sessions().filter(s => !terminal.has(s.state) && s.state !== 'CleanupPending');
           if (active.length >= LIMITS.sessionsPerWorker || active.filter(s => s.conversationKey === session.conversationKey).length >= LIMITS.sessionsPerConversation) throw new BrowserFault('RATE_LIMITED');
           if (args.profileId) {
             if (this.repo.db.prepare('SELECT id FROM leases WHERE id=?').get(args.profileId)) throw new BrowserFault('POLICY_DENIED');
@@ -197,7 +200,8 @@ export class BrowserCore {
   pageRecord(page) {
     if (!page || typeof page.pageId !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{2,127}$/.test(page.pageId) || !Number.isSafeInteger(page.documentGeneration) || page.documentGeneration < 1) throw new BrowserFault('BACKEND_UNAVAILABLE');
     let origin = null;
-    if (page.url) { const u = new URL(page.url); if (u.protocol === 'https:') origin = u.origin; else if (page.url !== 'about:blank') throw new BrowserFault('POLICY_DENIED'); }
+    const pageUrl = typeof page.url === 'string' ? page.url : page.url?.href;
+    if (pageUrl) { const u = new URL(pageUrl); if (u.protocol === 'https:') origin = u.origin; else if (pageUrl !== 'about:blank') throw new BrowserFault('POLICY_DENIED'); }
     return { id: page.pageId, generation: page.documentGeneration, origin };
   }
   binding(auth, session, name, args, digest) {

@@ -708,6 +708,7 @@ function browserController() {
   return desktopBrowserController ??= createDesktopBrowserController({
     resourcesPath: app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../../packaging/browser-client'),
     userDataPath: app.getPath('userData'),
+    getBroker: () => browserBroker,
     onDisconnect: () => {
       // Browser grants are fenced by the worker. Existing terminals retain their
       // inference/FUSE lifecycle; browser requests fail until explicit recovery.
@@ -3663,6 +3664,12 @@ async function createMainWindow() {
   };
   mainWindow.webContents.on("will-navigate", blockOffAppNavigation);
   mainWindow.webContents.on("will-redirect", blockOffAppNavigation);
+
+  mainWindow.webContents.on("zoom-changed", () => {
+    try {
+      mainWindow.webContents.send("openrind-desktop:browser:event", { type: "zoom-changed" });
+    } catch {}
+  });
 
   const startUrl =
     process.env.OPENRIND_DESKTOP_ELECTRON_START_URL?.trim() ||

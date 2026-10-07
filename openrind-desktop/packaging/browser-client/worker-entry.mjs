@@ -54,6 +54,7 @@ async function main() {
   // from the renderer; the binary stdio bridge cannot invoke these controls.
   process.on('message', message => {
     if (stopping) return;
+    if (message?.type === 'desktop_provider_reply') return;
     if (!object(message) || typeof message.id !== 'string' || !/^[a-f0-9]{32}$/.test(message.id)) { stop(); return; }
     try {
       let value;
