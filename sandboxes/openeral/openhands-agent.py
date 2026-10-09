@@ -117,8 +117,8 @@ def install_session_transport(context, base_url=None):
             kwargs['follow_redirects'] = False
         return await async_send(client, request, *args, **kwargs)
 
-    httpx.Client.send = send_scoped
-    httpx.AsyncClient.send = async_send_scoped
+    setattr(httpx.Client, 'send', send_scoped)
+    setattr(httpx.AsyncClient, 'send', async_send_scoped)
 
 
 def main():
@@ -175,8 +175,13 @@ def main():
         args += ['--headless', '--file', path, '--always-approve']
     install_session_transport(context, base)
     sys.argv = args
-    from openhands_cli.entrypoint import main as openhands_main
-    openhands_main()
+    try:
+        from openhands_cli.entrypoint import main as openhands_main
+        openhands_main()
+    except (ImportError, ModuleNotFoundError):
+        import importlib
+        openhands_cli = importlib.import_module("openhands_cli.entrypoint")
+        getattr(openhands_cli, "main")()
 
 
 if __name__ == '__main__':

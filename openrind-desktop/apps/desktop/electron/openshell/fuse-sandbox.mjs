@@ -786,6 +786,10 @@ async function provisionOpenrindShellSandbox(options) {
     sandboxArgs.push("--env", `HALOOP_GATEWAY_URL=${haloop.endpoint}`);
     const activeProvider = resolveHaloopProvider(process.env);
     sandboxArgs.push("--env", `W8_HALOOP_PROVIDER=${activeProvider}`);
+    const activeOpenrouterKey = (process.env.OPENROUTER_API_KEY || "").trim();
+    if (activeOpenrouterKey) {
+      sandboxArgs.push("--env", `OPENROUTER_API_KEY=${activeOpenrouterKey}`);
+    }
     const activeOpenrouterModel = (process.env.OPENROUTER_MODEL || process.env.LLM_MODEL || "").trim();
     if (activeOpenrouterModel) {
       sandboxArgs.push("--env", `OPENROUTER_MODEL=${activeOpenrouterModel}`);
