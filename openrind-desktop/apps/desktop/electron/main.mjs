@@ -38,7 +38,7 @@ function loadDotenv(filePath) {
 
 const __mainDir = path.dirname(fileURLToPath(import.meta.url));
 loadDotenv(path.resolve(__mainDir, "../../../.env"));
-loadDotenv(path.resolve(__mainDir, "../../.env"));
+loadDotenv(path.resolve(__mainDir, "../.env"));
 
 import {
   app,

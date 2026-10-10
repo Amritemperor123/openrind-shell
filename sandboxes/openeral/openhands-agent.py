@@ -175,13 +175,8 @@ def main():
         args += ['--headless', '--file', path, '--always-approve']
     install_session_transport(context, base)
     sys.argv = args
-    try:
-        from openhands_cli.entrypoint import main as openhands_main
-        openhands_main()
-    except (ImportError, ModuleNotFoundError):
-        import importlib
-        openhands_cli = importlib.import_module("openhands_cli.entrypoint")
-        getattr(openhands_cli, "main")()
+    from openhands_cli.entrypoint import main as openhands_main
+    openhands_main()
 
 
 if __name__ == '__main__':

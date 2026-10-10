@@ -32,6 +32,10 @@ const isLoopbackOrInternal = targetUrl.hostname === '127.0.0.1' ||
   targetUrl.hostname === 'host.openshell.internal';
 const isSecureUpstream = isHttps || isLoopbackOrInternal;
 const isAuthorizedHost = isSecureUpstream || AUTHORIZED_GATEWAY_HOSTS.has(targetUrl.hostname);
+if (!isAuthorizedHost) {
+  console.error(`[haloop-proxy] Refusing to start with unauthorized gateway host: ${targetUrl.hostname}`);
+  process.exit(1);
+}
 const client = isHttps ? https : http;
 
 const proxyEnv = process.env.HTTP_PROXY || process.env.http_proxy || process.env.ALL_PROXY || process.env.all_proxy;
@@ -301,7 +305,7 @@ const server = http.createServer((req, res) => {
         forwardHeaders['x-w8-haloop-api-key'] = authKey;
       }
 
-      if (sessionContext) {
+      if (sessionContext && isSecureUpstream) {
         forwardHeaders['x-openrind-haloop-session'] = sessionContext;
       }
 
