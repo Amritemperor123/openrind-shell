@@ -12,11 +12,6 @@ if [ -f "$RUNTIME_DIR/haloop-context.env" ]; then
   . "$RUNTIME_DIR/haloop-context.env"
 fi
 
-if [ -f "$RUNTIME_DIR/api-key.env" ]; then
-  # shellcheck disable=SC1090
-  . "$RUNTIME_DIR/api-key.env"
-fi
-
 export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-sk-ant-openrind-session-token}"
 
 export HOME="${OPENRIND_SHELL_CLAUDE_HOME:-/sandbox/claude-home}"
@@ -121,8 +116,9 @@ fi
 PROXY_PID=""
 if [ -f /opt/openrind-shell/haloop-agent-proxy.mjs ]; then
   if ! curl -s -o /dev/null http://127.0.0.1:8785/healthz 2>/dev/null; then
-    export HALOOP_GATEWAY_URL="${HALOOP_GATEWAY_URL:-${HALOOP_UPSTREAM_URL:-http://136.112.93.84:8787}}"
+    export HALOOP_GATEWAY_URL="${HALOOP_GATEWAY_URL:-${HALOOP_UPSTREAM_URL:-http://host.openshell.internal:8787}}"
     export HALOOP_UPSTREAM_URL="$HALOOP_GATEWAY_URL"
+    export NODE_USE_ENV_PROXY=1
     /usr/bin/node /opt/openrind-shell/haloop-agent-proxy.mjs &
     PROXY_PID=$!
     for _i in $(seq 1 30); do

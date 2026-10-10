@@ -80,8 +80,6 @@ if ! printf '%s' "$session_context" | grep -Eq '^v1\.[0-9a-f]{32}\.[1-9][0-9]{9,
   exit 64
 fi
 export OPENRIND_HALOOP_SESSION_CONTEXT="$session_context"
-printf 'export OPENRIND_HALOOP_SESSION_CONTEXT=%s\nexport ANTHROPIC_CUSTOM_HEADERS="x-openrind-haloop-session: %s"\n' "$session_context" "$session_context" > "$RUNTIME_DIR/haloop-context.env"
-chmod 600 "$RUNTIME_DIR/haloop-context.env"
 unset session_context marker_remainder marker
 
 case "$session_id" in
